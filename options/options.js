@@ -2,10 +2,12 @@ const DEFAULT_SETTINGS = {
   saveFolder: "",
   conflictAction: "uniquify",
   autoClearAfterUse: true,
-  allowMultiple: true
+  allowMultiple: true,
+  promptOnDownload: true
 };
 
 const saveFolderInput = document.getElementById("save-folder");
+const promptOnDownloadInput = document.getElementById("prompt-on-download");
 const allowMultipleInput = document.getElementById("allow-multiple");
 const autoClearInput = document.getElementById("auto-clear");
 const saveButton = document.getElementById("save");
@@ -18,6 +20,7 @@ async function init() {
   const settings = { ...DEFAULT_SETTINGS, ...userSettings };
 
   saveFolderInput.value = settings.saveFolder;
+  promptOnDownloadInput.checked = settings.promptOnDownload;
   allowMultipleInput.checked = settings.allowMultiple;
   autoClearInput.checked = settings.autoClearAfterUse;
   const conflictRadio = document.querySelector(
@@ -37,6 +40,7 @@ async function save() {
     userSettings: {
       saveFolder: saveFolderInput.value.trim(),
       conflictAction,
+      promptOnDownload: promptOnDownloadInput.checked,
       allowMultiple: allowMultipleInput.checked,
       autoClearAfterUse: autoClearInput.checked
     }
