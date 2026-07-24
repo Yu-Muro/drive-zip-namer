@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Drive Zip Namer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Drive Zip Namer</h1>
+    <button id="open-options" title="設定" aria-label="設定">⚙</button>
+  </header>
+
+  <main>
+    <label for="filename">ZIPファイル名</label>
+    <div class="input-row">
+      <input id="filename" type="text" placeholder="例: 2026-07-24_納品データ" autofocus>
+      <span class="ext">.zip</span>
+    </div>
+    <p class="hint">{date} {time} {datetime} が使えます</p>
+    <p id="preview" class="preview"></p>
+
+    <button id="save" class="primary">次のDriveダウンロードに適用</button>
+
+    <div id="status" class="status" hidden>
+      <p id="status-text"></p>
+      <button id="clear" class="link">予約をクリア</button>
+    </div>
+
+    <section id="history-section" hidden>
+      <h2>最近使った名前</h2>
+      <ul id="history"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

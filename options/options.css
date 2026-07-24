@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light dark;
+  --accent: #1a73e8;
+  --accent-hover: #1765cc;
+  --border: #dadce0;
+  --text-sub: #5f6368;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --border: #5f6368;
+    --text-sub: #9aa0a6;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 24px;
+}
+
+section {
+  margin-bottom: 24px;
+}
+
+label,
+.group-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-sub);
+}
+
+input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.radio,
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  padding: 9px 24px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.primary:hover {
+  background: var(--accent-hover);
+}
+
+#saved-note {
+  display: inline-block;
+  margin-left: 12px;
+  color: var(--accent);
+}
