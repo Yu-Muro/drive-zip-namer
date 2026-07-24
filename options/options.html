@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Drive Zip Namer - 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Drive Zip Namer 設定</h1>
+
+    <section>
+      <label for="save-folder">保存先サブフォルダ（ダウンロードフォルダ内）</label>
+      <input id="save-folder" type="text" placeholder="例: GoogleDrive（空欄で直下に保存）">
+    </section>
+
+    <section>
+      <span class="group-label">同名ファイルがある場合</span>
+      <label class="radio"><input type="radio" name="conflict" value="uniquify" checked> 自動連番を付ける</label>
+      <label class="radio"><input type="radio" name="conflict" value="overwrite"> 上書きする</label>
+      <label class="radio"><input type="radio" name="conflict" value="prompt"> 確認ダイアログを出す</label>
+    </section>
+
+    <section>
+      <label class="check">
+        <input id="allow-multiple" type="checkbox" checked>
+        分割ZIPに対応する（最初のZIPから30秒間、同じ名前 + _part2, _part3… を適用）
+      </label>
+      <label class="check">
+        <input id="auto-clear" type="checkbox" checked>
+        使用後に予約を自動でクリアする（分割ZIP対応が無効のとき）
+      </label>
+    </section>
+
+    <button id="save" class="primary">保存</button>
+    <p id="saved-note" hidden>保存しました</p>
+  </main>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
