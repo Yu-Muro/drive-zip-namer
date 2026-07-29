@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Drive Zip Namer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Rename ZIP files downloaded from Google Drive. Google Driveの一括ダウンロードZIPに任意の名前を付けます。",
   "permissions": [
     "downloads",

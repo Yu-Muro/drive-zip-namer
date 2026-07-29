@@ -10,6 +10,12 @@
     <h1>Drive Zip Namer 設定</h1>
 
     <section>
+      <label for="default-template">既定テンプレート（ダウンロード時ダイアログの初期値）</label>
+      <input id="default-template" type="text" placeholder="例: {date}_{folder}">
+      <p class="note">{date} {time} {datetime} {project} {folder} {count} が使えます。</p>
+    </section>
+
+    <section>
       <label for="save-folder">保存先サブフォルダ（ダウンロードフォルダ内）</label>
       <input id="save-folder" type="text" placeholder="例: GoogleDrive（空欄で直下に保存）">
     </section>
@@ -43,7 +49,38 @@
     </section>
 
     <button id="save" class="primary">保存</button>
-    <p id="saved-note" hidden>保存しました</p>
+    <span id="saved-note" hidden>保存しました</span>
+
+    <hr>
+
+    <section>
+      <h2>案件別プリセット</h2>
+      <p class="note">よく使う命名テンプレートを保存しておくと、ポップアップやダウンロード時ダイアログからワンクリックで呼び出せます。</p>
+      <table id="presets-table">
+        <thead>
+          <tr><th>名前</th><th>テンプレート</th><th></th></tr>
+        </thead>
+        <tbody id="presets-body"></tbody>
+      </table>
+      <div class="preset-add">
+        <input id="preset-name" type="text" placeholder="名前（例: 請求書）">
+        <input id="preset-template" type="text" placeholder="テンプレート（例: {date}_請求書）">
+        <button id="preset-add-btn" class="secondary" type="button">追加</button>
+      </div>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>設定のバックアップ</h2>
+      <p class="note">設定とプリセットを JSON ファイルで書き出し・読み込みできます。チームで命名ルールを共有するのに使えます。</p>
+      <div class="backup-actions">
+        <button id="export-btn" class="secondary" type="button">エクスポート</button>
+        <button id="import-btn" class="secondary" type="button">インポート</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p id="backup-note" class="backup-note" hidden></p>
+    </section>
   </main>
 
   <script type="module" src="options.js"></script>
