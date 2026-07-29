@@ -74,8 +74,114 @@ input[type="text"] {
   background: var(--accent-hover);
 }
 
+.note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.check + .note {
+  margin-left: 26px;
+}
+
 #saved-note {
-  display: inline-block;
   margin-left: 12px;
   color: var(--accent);
+}
+
+#saved-note:not([hidden]) {
+  display: inline-block;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.secondary {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: rgba(26, 115, 232, 0.1);
+}
+
+#presets-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+#presets-table th,
+#presets-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+#presets-table th {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+#presets-table code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+#presets-table td.empty {
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.link-danger {
+  border: none;
+  background: none;
+  color: #d93025;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+
+.preset-add {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.preset-add input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.backup-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.backup-note.error {
+  color: #d93025;
 }

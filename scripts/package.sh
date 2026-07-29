@@ -14,6 +14,7 @@ rm -f "$OUT_DIR/$OUT"
 zip -r "$OUT_DIR/$OUT" \
   manifest.json \
   background.js \
+  content \
   popup \
   options \
   lib \

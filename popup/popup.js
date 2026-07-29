@@ -4,7 +4,10 @@ import { sanitizeZipFilename, applyTemplate } from "../lib/filename.js";
 const PENDING_TTL_MS = 5 * 60 * 1000;
 const HISTORY_MAX = 5;
 
+const presetsSection = document.getElementById("presets-section");
+const presetsEl = document.getElementById("presets");
 const filenameInput = document.getElementById("filename");
+const projectInput = document.getElementById("project");
 const previewEl = document.getElementById("preview");
 const saveButton = document.getElementById("save");
 const statusEl = document.getElementById("status");
@@ -17,15 +20,21 @@ const optionsButton = document.getElementById("open-options");
 init();
 
 async function init() {
-  const { pendingRename, nameHistory } = await chrome.storage.local.get([
-    "pendingRename",
-    "nameHistory"
-  ]);
+  const { pendingRename, nameHistory, presets, lastProject } =
+    await chrome.storage.local.get([
+      "pendingRename",
+      "nameHistory",
+      "presets",
+      "lastProject"
+    ]);
 
+  projectInput.value = lastProject ?? "";
   renderStatus(pendingRename);
   renderHistory(nameHistory ?? []);
+  renderPresets(presets ?? []);
 
   filenameInput.addEventListener("input", renderPreview);
+  projectInput.addEventListener("input", renderPreview);
   filenameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") save();
   });
@@ -36,13 +45,18 @@ async function init() {
   renderPreview();
 }
 
+function currentVars() {
+  return { now: new Date(), project: projectInput.value.trim() };
+}
+
 function renderPreview() {
   const raw = filenameInput.value;
   if (!raw.trim()) {
     previewEl.textContent = "";
     return;
   }
-  previewEl.textContent = `→ ${sanitizeZipFilename(applyTemplate(raw))}`;
+  // {folder}/{count} はダウンロード時に展開されるため、ここでは残る
+  previewEl.textContent = `→ ${sanitizeZipFilename(applyTemplate(raw, currentVars()))}`;
 }
 
 async function save() {
@@ -52,12 +66,15 @@ async function save() {
     return;
   }
 
-  const filename = sanitizeZipFilename(applyTemplate(raw));
   const now = Date.now();
+  const project = projectInput.value.trim();
 
+  // 生のテンプレートを保存し、展開はダウンロード時に行う
+  // （{folder}/{count} を実際のDrive文脈で埋められるようにするため）
   const pendingRename = {
     enabled: true,
-    filename,
+    template: raw,
+    project,
     createdAt: now,
     expiresAt: now + PENDING_TTL_MS,
     sequence: 0,
@@ -70,7 +87,11 @@ async function save() {
     HISTORY_MAX
   );
 
-  await chrome.storage.local.set({ pendingRename, nameHistory: history });
+  await chrome.storage.local.set({
+    pendingRename,
+    nameHistory: history,
+    lastProject: project
+  });
   window.close();
 }
 
@@ -80,14 +101,39 @@ async function clearPending() {
 }
 
 function renderStatus(pendingRename) {
-  const active =
-    pendingRename?.enabled && Date.now() < pendingRename.expiresAt;
+  const active = pendingRename?.enabled && Date.now() < pendingRename.expiresAt;
 
   statusEl.hidden = !active;
   if (active) {
     const remainMin = Math.ceil((pendingRename.expiresAt - Date.now()) / 60000);
-    statusTextEl.textContent = `予約中: ${pendingRename.filename}（あと約${remainMin}分有効）`;
+    const template = pendingRename.template ?? pendingRename.filename ?? "";
+    const preview = sanitizeZipFilename(
+      applyTemplate(template, {
+        now: new Date(pendingRename.createdAt ?? Date.now()),
+        project: pendingRename.project
+      })
+    );
+    statusTextEl.textContent = `予約中: ${preview}（あと約${remainMin}分有効）`;
   }
+}
+
+function renderPresets(presets) {
+  presetsSection.hidden = presets.length === 0;
+  presetsEl.replaceChildren(
+    ...presets.map((preset) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip";
+      btn.textContent = preset.name;
+      btn.title = preset.template;
+      btn.addEventListener("click", () => {
+        filenameInput.value = preset.template;
+        filenameInput.focus();
+        renderPreview();
+      });
+      return btn;
+    })
+  );
 }
 
 function renderHistory(history) {

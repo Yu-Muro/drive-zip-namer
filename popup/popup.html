@@ -12,13 +12,21 @@
   </header>
 
   <main>
+    <section id="presets-section" hidden>
+      <label>プリセット</label>
+      <div id="presets" class="presets"></div>
+    </section>
+
     <label for="filename">ZIPファイル名</label>
     <div class="input-row">
       <input id="filename" type="text" placeholder="例: 2026-07-24_納品データ" autofocus>
       <span class="ext">.zip</span>
     </div>
-    <p class="hint">{date} {time} {datetime} が使えます</p>
+    <p class="hint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
     <p id="preview" class="preview"></p>
+
+    <label for="project">プロジェクト名（{project}）</label>
+    <input id="project" type="text" placeholder="例: Canna（任意）">
 
     <button id="save" class="primary">次のDriveダウンロードに適用</button>
 

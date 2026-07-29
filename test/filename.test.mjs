@@ -42,9 +42,32 @@ test("applyTemplate: {date} {time} {datetime} を展開する", () => {
   assert.equal(applyTemplate("{datetime}", now), "2026-07-24_1430");
 });
 
-test("applyTemplate: 未知の変数はそのまま残す", () => {
+test("applyTemplate: 値が無い {folder}/{count}/{project} はそのまま残す", () => {
   const now = new Date(2026, 6, 24, 14, 30);
   assert.equal(applyTemplate("{folder}_x", now), "{folder}_x");
+  assert.equal(applyTemplate("{count}_{project}", now), "{count}_{project}");
+});
+
+test("applyTemplate: vars で {project}/{folder}/{count} を展開する", () => {
+  const now = new Date(2026, 6, 24, 14, 30);
+  assert.equal(
+    applyTemplate("{date}_{project}_{folder}_{count}files", {
+      now,
+      project: "Canna",
+      folder: "請求書",
+      count: 12
+    }),
+    "2026-07-24_Canna_請求書_12files"
+  );
+});
+
+test("applyTemplate: count が 0 でも展開する", () => {
+  assert.equal(applyTemplate("{count}", { count: 0 }).startsWith("0"), true);
+});
+
+test("applyTemplate: 第2引数に Date を渡す後方互換が保たれる", () => {
+  const now = new Date(2026, 6, 24, 14, 30);
+  assert.equal(applyTemplate("{datetime}", now), "2026-07-24_1430");
 });
 
 test("buildSequencedFilename: 1個目はそのまま、2個目以降は _partN", () => {
