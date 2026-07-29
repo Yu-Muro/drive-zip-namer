@@ -1,5 +1,7 @@
 # Drive Zip Namer
 
+[![CI](https://github.com/Yu-Muro/drive-zip-namer/actions/workflows/ci.yml/badge.svg)](https://github.com/Yu-Muro/drive-zip-namer/actions/workflows/ci.yml)
+
 Google Drive で複数ファイルを選択してダウンロードしたときに生成される ZIP ファイル
 （`drive-download-20260724T031500Z-001.zip` のような自動命名）を、**自分で決めた名前で保存できる** Chrome 拡張機能です。
 
@@ -102,17 +104,24 @@ content script が自前のモーダル（Shadow DOM）を表示します。Driv
 # ユニットテスト
 npm test
 
+# manifest 検証 & バージョン整合チェック
+npm run validate
+
 # アイコン生成
-node scripts/generate-icons.mjs
+npm run icons
 
 # 配布用 ZIP の作成（dist/drive-zip-namer-<version>.zip）
 npm run package
 ```
 
+push / Pull Request のたびに [GitHub Actions](.github/workflows/ci.yml) が
+上記のテスト・検証・パッケージ生成を Node 20 / 22 で自動実行します。
+
 ### ディレクトリ構成
 
 ```
 drive-zip-namer/
+├── .github/workflows/     # GitHub Actions CI
 ├── manifest.json          # Manifest V3
 ├── background.js          # service worker（ダウンロード名の差し替え）
 ├── content/               # Drive ページに出す名前入力モーダル
