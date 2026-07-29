@@ -115,7 +115,7 @@ npm run package
 ```
 
 push / Pull Request のたびに [GitHub Actions](.github/workflows/ci.yml) が
-上記のテスト・検証・パッケージ生成を Node 20 / 22 で自動実行します。
+上記のテスト・検証・パッケージ生成を Node 20 / 22 / 26（最新）で自動実行します。
 
 ### ディレクトリ構成
 
