@@ -38,7 +38,7 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 | `{date}` | `2026-07-24` | 名前を決めた時点の日付 |
 | `{time}` | `1430` | 名前を決めた時点の時刻 |
 | `{datetime}` | `2026-07-24_1430` | 日付_時刻 |
-| `{project}` | `Canna` | ポップアップの「プロジェクト名」欄の値 |
+| `{project}` | `DefaultProject` | ポップアップの「プロジェクト名」欄の値 |
 | `{folder}` | `請求書` | ダウンロード時の Drive の現在フォルダ名 |
 | `{count}` | `12` | 選択中のファイル数 |
 
@@ -72,6 +72,12 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 - 分割 ZIP 対応のオン・オフ
 - 案件別プリセットの管理
 - 設定のエクスポート / インポート
+
+## Chrome Web Store への公開
+
+公開・更新の手順は [docs/PUBLISHING.md](docs/PUBLISHING.md) を参照してください。
+掲載テキストは [docs/store-listing.md](docs/store-listing.md)、ストア用スクリーンショットと
+プロモタイルは [`assets/store/`](assets/store/) にあります。
 
 ## インストール（開発版）
 

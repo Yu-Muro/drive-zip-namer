@@ -19,6 +19,6 @@ zip -r "$OUT_DIR/$OUT" \
   options \
   lib \
   assets \
-  -x "*.DS_Store"
+  -x "*.DS_Store" "assets/store/*"
 
 echo "created $OUT_DIR/$OUT"
