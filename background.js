@@ -26,14 +26,28 @@ const MULTI_ZIP_WINDOW_MS = 30 * 1000;
 // モーダルの応答を待つ最大時間。これを過ぎたらChromeのデフォルト命名に任せる
 const PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
 const HISTORY_MAX = 5;
+const SESSION_STORAGE_KEY = "downloadSessions";
+const INTENT_STORAGE_KEY = "downloadIntents";
+const DOWNLOAD_INTENT_TTL_MS = 15 * 1000;
+const MAX_SESSIONS = 20;
 
-// 「ダウンロード時モーダル」で決めた名前を、同時/連続して落ちてくる分割ZIPで
-// 共有するためのグループ。service worker のメモリ上に保持する。
-let promptGroup = null; // { basePromise: Promise<string|null>, seq: number, expiresAt: number }
+// 名前入力中の Promise だけは同一 service worker 内で共有する。確定後の状態は
+// chrome.storage.session に保存し、service worker の再起動後も復元できるようにする。
+const inFlightPromptGroups = new Map();
+let sessionLock = Promise.resolve();
 
 chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
   handleFilename(downloadItem, suggest);
   return true; // suggest() を非同期に呼ぶため
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "DZN_REGISTER_DOWNLOAD_INTENT") return false;
+
+  rememberDownloadIntent(sender.tab, message.context)
+    .then(() => sendResponse({ ok: true }))
+    .catch(() => sendResponse({ ok: false }));
+  return true;
 });
 
 // 新規インストール・更新時に初期プリセットを用意する。
@@ -79,7 +93,7 @@ async function handleFilename(downloadItem, suggest) {
 
       // {folder}/{count} が含まれるときだけ Drive文脈を取りに行く
       const context = /\{(folder|count)\}/.test(template)
-        ? await getDriveContext()
+        ? await getDriveContext(downloadItem)
         : {};
 
       const base = sanitizeZipFilename(
@@ -132,23 +146,29 @@ async function handleFilename(downloadItem, suggest) {
       return;
     }
 
-    // 同じ操作で分割された後続ZIPは、同じ名前+連番で共有する
-    if (!settings.allowMultiple) {
-      promptGroup = null;
-    }
+    const target = await resolveDriveTarget(downloadItem);
+    const groupKey = target?.tab?.id == null ? null : `tab:${target.tab.id}`;
 
-    if (settings.allowMultiple && promptGroup && now <= promptGroup.expiresAt) {
-      const activeGroup = promptGroup;
+    // 同じタブで名前入力中の後続ZIPは、その入力結果を共有する。
+    const activeGroup = settings.allowMultiple && groupKey && target.source !== "intent"
+      ? inFlightPromptGroups.get(groupKey)
+      : null;
+    if (activeGroup && now <= activeGroup.expiresAt) {
       const base = await activeGroup.basePromise;
       if (!base) {
-        if (promptGroup === activeGroup) promptGroup = null;
+        inFlightPromptGroups.delete(groupKey);
         respond();
         return;
       }
       activeGroup.seq += 1;
-      if (promptGroup === activeGroup) {
-        promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
-      }
+      activeGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+      await saveDownloadSession({
+        id: activeGroup.id,
+        tabId: target.tab.id,
+        base,
+        seq: activeGroup.seq,
+        expiresAt: activeGroup.expiresAt
+      });
       respond({
         filename: withSaveFolder(
           buildSequencedFilename(base, activeGroup.seq),
@@ -159,26 +179,57 @@ async function handleFilename(downloadItem, suggest) {
       return;
     }
 
-    // 新しいグループ: モーダルを表示して名前を取得
-    const currentGroup = {
-      seq: 0,
-      expiresAt: now + PROMPT_TIMEOUT_MS + MULTI_ZIP_WINDOW_MS,
-      basePromise: askForName(settings, presets, lastProject)
-    };
-    promptGroup = settings.allowMultiple ? currentGroup : null;
-
-    const base = await currentGroup.basePromise;
-    if (promptGroup === currentGroup) {
-      promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+    // service worker の再起動前に確定済みだった分割ZIPセッションを復元する。
+    if (settings.allowMultiple && target?.source !== "intent") {
+      const resumed = await claimDownloadSession(target?.tab?.id, now);
+      if (resumed) {
+        respond({
+          filename: withSaveFolder(
+            buildSequencedFilename(resumed.base, resumed.seq),
+            settings.saveFolder
+          ),
+          conflictAction: settings.conflictAction
+        });
+        return;
+      }
     }
 
+    // 対象タブを安全に決められない場合、別タブへモーダルを出さない。
+    if (!target?.tab?.id) {
+      respond();
+      return;
+    }
+
+    // 新しいグループ: モーダルを表示して名前を取得
+    const currentGroup = {
+      id: crypto.randomUUID(),
+      seq: 0,
+      expiresAt: now + PROMPT_TIMEOUT_MS + MULTI_ZIP_WINDOW_MS,
+      basePromise: askForName(settings, presets, lastProject, target.tab)
+    };
+    if (settings.allowMultiple && groupKey) {
+      inFlightPromptGroups.set(groupKey, currentGroup);
+    }
+
+    const base = await currentGroup.basePromise;
+    currentGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+
     if (!base) {
-      if (promptGroup === currentGroup) promptGroup = null;
+      if (groupKey) inFlightPromptGroups.delete(groupKey);
       respond();
       return;
     }
 
     currentGroup.seq += 1;
+    if (settings.allowMultiple) {
+      await saveDownloadSession({
+        id: currentGroup.id,
+        tabId: target.tab.id,
+        base,
+        seq: currentGroup.seq,
+        expiresAt: currentGroup.expiresAt
+      });
+    }
     respond({
       filename: withSaveFolder(
         buildSequencedFilename(base, currentGroup.seq),
@@ -196,9 +247,8 @@ async function handleFilename(downloadItem, suggest) {
  * Driveタブの content script にモーダル表示を依頼し、確定した名前を返す。
  * キャンセル・タイムアウト・タブ無し・失敗時は null（＝Chromeのデフォルト命名）。
  */
-async function askForName(settings, presets, project) {
+async function askForName(settings, presets, project, tab) {
   try {
-    const tab = await findDriveTab();
     if (!tab?.id) return null;
 
     const now = new Date();
@@ -257,9 +307,13 @@ async function rememberName(name) {
 }
 
 /** Driveタブに現在のフォルダ名・選択数を問い合わせる（取得できなければ空） */
-async function getDriveContext() {
+async function getDriveContext(downloadItem) {
   try {
-    const tab = await findDriveTab();
+    const target = await resolveDriveTarget(downloadItem);
+    if (target?.context?.folder || target?.context?.count) {
+      return target.context;
+    }
+    const tab = target?.tab;
     if (!tab?.id) return {};
     const resp = await withTimeout(
       chrome.tabs.sendMessage(tab.id, { type: "DZN_GET_DRIVE_CONTEXT" }),
@@ -279,10 +333,172 @@ function dateValues(now) {
   return { date, time, datetime: `${date}_${time}` };
 }
 
-async function findDriveTab() {
+function storageSession() {
+  return chrome.storage.session ?? chrome.storage.local;
+}
+
+async function rememberDownloadIntent(tab, context) {
+  if (!tab?.id || !String(tab.url ?? "").startsWith("https://drive.google.com/")) {
+    return;
+  }
+
+  await withSessionLock(async () => {
+    const area = storageSession();
+    const now = Date.now();
+    const stored = await area.get(INTENT_STORAGE_KEY);
+    const intents = normalizeTimedList(stored[INTENT_STORAGE_KEY], now).slice(-9);
+    intents.push({
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: tab.url,
+      at: now,
+      context: normalizeContext(context)
+    });
+    await area.set({ [INTENT_STORAGE_KEY]: intents });
+  });
+}
+
+async function resolveDriveTarget(downloadItem) {
   const tabs = await chrome.tabs.query({ url: "https://drive.google.com/*" });
   if (tabs.length === 0) return null;
-  return tabs.find((t) => t.active) ?? tabs[0];
+
+  const referrer = safeUrl(downloadItem?.referrer);
+  if (referrer?.hostname === "drive.google.com") {
+    const exact = tabs.find((tab) => sameDriveLocation(tab.url, referrer));
+    if (exact) return { tab: exact, source: "referrer" };
+  }
+
+  const intent = await consumeDownloadIntent(tabs);
+  if (intent) {
+    return {
+      tab: tabs.find((tab) => tab.id === intent.tabId),
+      context: intent.context,
+      source: "intent"
+    };
+  }
+
+  const activeSessions = await loadDownloadSessions(Date.now());
+  if (activeSessions.length === 1) {
+    const sessionTab = tabs.find((tab) => tab.id === activeSessions[0].tabId);
+    if (sessionTab) return { tab: sessionTab, source: "session" };
+  }
+  if (activeSessions.length > 1) return null;
+
+  const activeTabs = tabs.filter((tab) => tab.active);
+  if (activeTabs.length === 1) return { tab: activeTabs[0], source: "active" };
+  if (tabs.length === 1) return { tab: tabs[0], source: "only-tab" };
+  return null;
+}
+
+async function consumeDownloadIntent(tabs) {
+  return withSessionLock(async () => {
+    const area = storageSession();
+    const now = Date.now();
+    const stored = await area.get(INTENT_STORAGE_KEY);
+    const intents = normalizeTimedList(stored[INTENT_STORAGE_KEY], now).filter(
+      (intent) => tabs.some((tab) => tab.id === intent.tabId)
+    );
+    const intent = intents.shift() ?? null;
+    await area.set({ [INTENT_STORAGE_KEY]: intents });
+    return intent;
+  });
+}
+
+function normalizeTimedList(raw, now) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item) =>
+      item &&
+      Number.isFinite(item.at) &&
+      now - item.at >= 0 &&
+      now - item.at <= DOWNLOAD_INTENT_TTL_MS
+  );
+}
+
+function normalizeContext(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  return {
+    folder: typeof raw.folder === "string" ? raw.folder : null,
+    count: Number.isInteger(raw.count) && raw.count > 0 ? raw.count : null
+  };
+}
+
+async function loadDownloadSessions(now) {
+  const area = storageSession();
+  const stored = await area.get(SESSION_STORAGE_KEY);
+  const sessions = Array.isArray(stored[SESSION_STORAGE_KEY])
+    ? stored[SESSION_STORAGE_KEY].filter(
+        (session) =>
+          session &&
+          typeof session.id === "string" &&
+          Number.isInteger(session.tabId) &&
+          typeof session.base === "string" &&
+          Number.isInteger(session.seq) &&
+          Number.isFinite(session.expiresAt) &&
+          now <= session.expiresAt
+      )
+    : [];
+  return sessions.slice(-MAX_SESSIONS);
+}
+
+async function saveDownloadSession(session) {
+  await withSessionLock(async () => {
+    const area = storageSession();
+    const sessions = (await loadDownloadSessions(Date.now())).filter(
+      (item) => item.id !== session.id && item.tabId !== session.tabId
+    );
+    sessions.push(session);
+    await area.set({ [SESSION_STORAGE_KEY]: sessions.slice(-MAX_SESSIONS) });
+  });
+}
+
+async function claimDownloadSession(tabId, now) {
+  return withSessionLock(async () => {
+    const area = storageSession();
+    const sessions = await loadDownloadSessions(now);
+    const candidates = tabId == null
+      ? sessions
+      : sessions.filter((session) => session.tabId === tabId);
+    if (candidates.length !== 1) return null;
+
+    const claimed = candidates[0];
+    claimed.seq += 1;
+    claimed.expiresAt = now + MULTI_ZIP_WINDOW_MS;
+    await area.set({ [SESSION_STORAGE_KEY]: sessions });
+    return claimed;
+  });
+}
+
+async function withSessionLock(task) {
+  const previous = sessionLock;
+  let release;
+  sessionLock = new Promise((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+}
+
+function safeUrl(value) {
+  try {
+    return value ? new URL(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function sameDriveLocation(tabUrl, referenceUrl) {
+  const tab = safeUrl(tabUrl);
+  return Boolean(
+    tab &&
+      tab.hostname === referenceUrl.hostname &&
+      tab.pathname === referenceUrl.pathname &&
+      tab.search === referenceUrl.search
+  );
 }
 
 function withTimeout(promise, ms) {

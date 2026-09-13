@@ -28,6 +28,47 @@
     return false;
   });
 
+  // Drive のダウンロード操作と直後に届く downloads イベントを関連付ける。
+  // DOMのクラス名には依存せず、アクセシブル名と表示テキストだけを使う。
+  document.addEventListener(
+    "click",
+    (event) => {
+      const action = event
+        .composedPath()
+        .find(
+          (node) =>
+            node instanceof Element &&
+            (node.matches('button,[role="button"],[role="menuitem"]') ||
+              node.closest?.('button,[role="button"],[role="menuitem"]'))
+        );
+      if (!action) return;
+
+      const control = action.matches('button,[role="button"],[role="menuitem"]')
+        ? action
+        : action.closest('button,[role="button"],[role="menuitem"]');
+      const label = [
+        control.getAttribute("aria-label"),
+        control.getAttribute("title"),
+        control.textContent
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!/(^|\s)(ダウンロード|Download)(\s|$)/i.test(label)) return;
+      chrome.runtime
+        .sendMessage({
+          type: "DZN_REGISTER_DOWNLOAD_INTENT",
+          context: readDriveContext()
+        })
+        .catch(() => {
+          // 登録できなくても、ダウンロード自体は妨げない。
+        });
+    },
+    true
+  );
+
   // --- Drive画面から文脈を読む（ベストエフォート） ---------------------------
 
   function readDriveContext() {
