@@ -366,6 +366,36 @@ test("予約テンプレートへDrive文脈と保存設定を反映する", asy
   assert.equal(app.getPromptCount(), 0);
 });
 
+test("使用済み予約を別タブの新しいダウンロードへ流用しない", async () => {
+  const now = Date.now();
+  const tabs = [
+    { id: 1, windowId: 1, active: true, url: "https://drive.google.com/drive/folders/a" },
+    { id: 2, windowId: 2, active: true, url: "https://drive.google.com/drive/folders/b" }
+  ];
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: true }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "reserved",
+        createdAt: now,
+        expiresAt: now + 60_000,
+        sequence: 0
+      }
+    },
+    tabs,
+    promptResponse: (tabId) => ({ name: `prompt-${tabId}` })
+  });
+
+  await app.registerIntent(1);
+  assert.equal((await app.runDownload()).filename, "reserved.zip");
+  await app.registerIntent(2);
+  assert.equal((await app.runDownload()).filename, "prompt-2.zip");
+  assert.equal(app.storage.pendingRename.sessionTabId, 1);
+  assert.equal((await app.runDownload()).filename, "reserved_part2.zip");
+});
+
 test("期限切れ予約を削除して通常の名前入力へ進む", async () => {
   const app = await loadBackground({
     initialStorage: {
