@@ -5,6 +5,8 @@
 Google Drive で複数ファイルを選択してダウンロードしたときに生成される ZIP ファイル
 （`drive-download-20260724T031500Z-001.zip` のような自動命名）を、**自分で決めた名前で保存できる** Chrome 拡張機能です。
 
+このブランチのバージョンは **v1.0.0** です。Chrome 102 以降に対応しています。
+
 <p align="center">
   <img src="assets/icon-128.png" alt="Drive Zip Namer icon" width="96">
 </p>
@@ -50,7 +52,7 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 ### 案件別プリセット
 
 よく使う命名テンプレートを「請求書」「納品データ」などの名前で保存しておき、ポップアップや
-ダウンロード時ダイアログからワンクリックで呼び出せます。オプション画面で追加・削除できます。
+ダウンロード時ダイアログからワンクリックで呼び出せます。オプション画面で追加・編集・削除・並べ替えができます。
 
 ### 設定のバックアップ（エクスポート / インポート）
 
@@ -74,6 +76,7 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 - 分割 ZIP 対応のオン・オフ
 - 案件別プリセットの管理
 - 設定のエクスポート / インポート
+- 直近の命名結果・失敗理由の確認と履歴削除
 
 ## Chrome Web Store への公開
 
@@ -94,7 +97,8 @@ Google Drive の ZIP 生成には一切介入しません。Chrome が保存フ�
 （`chrome.downloads.onDeterminingFilename`）で、Google Drive 由来の ZIP
 （URL が `drive.google.com` / `googleusercontent.com` 系で拡張子が `.zip`）だけを対象に
 保存名を差し替えます。ダウンロード時のダイアログ表示には、Drive ページに読み込まれる
-content script が自前のモーダル（Shadow DOM）を表示します。Drive の DOM 構造には依存しません。
+content script が自前のモーダル（Shadow DOM）を表示します。対象タブの判定と選択数の取得には、
+Drive のアクセシブル名・ロールをベストエフォートで利用し、クラス名には依存しません。
 
 | 権限 | 用途 |
 | --- | --- |
@@ -113,12 +117,21 @@ npm test
 # manifest 検証 & バージョン整合チェック
 npm run validate
 
+# テスト・manifest・JavaScript構文をまとめて検査
+npm run check
+
 # アイコン生成
 npm run icons
 
 # 配布用 ZIP の作成（dist/drive-zip-namer-<version>.zip）
 npm run package
+
+# v1リリース前の全検査
+npm run release:check
 ```
+
+v1 の手動確認項目は [docs/V1_RELEASE_CHECKLIST.md](docs/V1_RELEASE_CHECKLIST.md)、
+変更内容は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 push / Pull Request のたびに [GitHub Actions](.github/workflows/ci.yml) が
 上記のテスト・検証・パッケージ生成を Node 20 / 22 / 26（最新）で自動実行します。
