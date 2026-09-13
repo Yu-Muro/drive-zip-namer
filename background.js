@@ -88,10 +88,14 @@ async function handleFilename(downloadItem, suggest) {
       : normalizePresets(stored.presets);
     const lastProject = stored.lastProject ?? "";
     const now = Date.now();
+    const driveZip = isGoogleDriveZip(downloadItem);
+    const target = driveZip
+      ? await resolveDriveTarget(downloadItem, stored.pendingRename?.sessionTabId)
+      : null;
 
     // --- 1. ポップアップで事前予約されたテンプレートを最優先 ---
-    const pendingRename = isGoogleDriveZip(downloadItem)
-      ? await claimPendingRename(now, settings)
+    const pendingRename = driveZip
+      ? await claimPendingRename(now, settings, target)
       : null;
     if (pendingRename) {
       const template = pendingRename.template ?? pendingRename.filename ?? "";
@@ -99,7 +103,7 @@ async function handleFilename(downloadItem, suggest) {
 
       // {folder}/{count} が含まれるときだけ Drive文脈を取りに行く
       const context = /\{(folder|count)\}/.test(template)
-        ? await getDriveContext(downloadItem)
+        ? await getDriveContext(downloadItem, target)
         : {};
 
       const base = resolveZipTemplate(
@@ -133,7 +137,7 @@ async function handleFilename(downloadItem, suggest) {
     }
 
     // --- Drive由来のZIP以外はChromeに任せる ---
-    if (!isGoogleDriveZip(downloadItem)) {
+    if (!driveZip) {
       respond();
       return;
     }
@@ -144,7 +148,6 @@ async function handleFilename(downloadItem, suggest) {
       return;
     }
 
-    const target = await resolveDriveTarget(downloadItem);
     const groupKey = target?.tab?.id == null ? null : `tab:${target.tab.id}`;
 
     // 同じタブで名前入力中の後続ZIPは、その入力結果を共有する。
@@ -314,9 +317,9 @@ async function rememberName(name) {
 }
 
 /** Driveタブに現在のフォルダ名・選択数を問い合わせる（取得できなければ空） */
-async function getDriveContext(downloadItem) {
+async function getDriveContext(downloadItem, knownTarget) {
   try {
-    const target = await resolveDriveTarget(downloadItem);
+    const target = knownTarget ?? (await resolveDriveTarget(downloadItem));
     if (target?.context?.folder || target?.context?.count) {
       return target.context;
     }
@@ -379,12 +382,24 @@ function storageSession() {
   return chrome.storage.session ?? chrome.storage.local;
 }
 
-async function claimPendingRename(now, settings) {
+async function claimPendingRename(now, settings, target) {
   return withSessionLock(async () => {
     const { pendingRename } = await chrome.storage.local.get("pendingRename");
     if (!pendingRename?.enabled) return null;
     if (!Number.isFinite(pendingRename.expiresAt) || now > pendingRename.expiresAt) {
       await chrome.storage.local.remove("pendingRename");
+      return null;
+    }
+
+    const targetTabId = target?.tab?.id;
+    if (!Number.isInteger(targetTabId)) return null;
+    if (
+      Number.isInteger(pendingRename.sessionTabId) &&
+      pendingRename.sessionTabId !== targetTabId
+    ) {
+      return null;
+    }
+    if (pendingRename.firstUsedAt && target.source === "intent") {
       return null;
     }
 
@@ -399,6 +414,7 @@ async function claimPendingRename(now, settings) {
         pendingRename: {
           ...pendingRename,
           sequence: claimedSequence,
+          sessionTabId: targetTabId,
           firstUsedAt,
           expiresAt: firstUsedAt + MULTI_ZIP_WINDOW_MS
         }
@@ -431,7 +447,7 @@ async function rememberDownloadIntent(tab, context) {
   });
 }
 
-async function resolveDriveTarget(downloadItem) {
+async function resolveDriveTarget(downloadItem, preferredTabId) {
   const tabs = await chrome.tabs.query({ url: "https://drive.google.com/*" });
   if (tabs.length === 0) return null;
 
@@ -448,6 +464,11 @@ async function resolveDriveTarget(downloadItem) {
       context: intent.context,
       source: "intent"
     };
+  }
+
+  if (Number.isInteger(preferredTabId)) {
+    const preferred = tabs.find((tab) => tab.id === preferredTabId);
+    if (preferred) return { tab: preferred, source: "reservation-session" };
   }
 
   const activeSessions = await loadDownloadSessions(Date.now());
