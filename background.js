@@ -15,12 +15,17 @@ import {
   applyTemplate
 } from "./lib/filename.js";
 import { isGoogleDriveZip } from "./lib/drive-detection.js";
-import { normalizeSettings } from "./lib/settings.js";
+import {
+  DEFAULT_PRESETS,
+  normalizePresets,
+  normalizeSettings
+} from "./lib/settings.js";
 
 // 分割ZIP対応: 最初のZIP検知からこの時間内に来た後続ZIPには同じ名前+連番を使う
 const MULTI_ZIP_WINDOW_MS = 30 * 1000;
 // モーダルの応答を待つ最大時間。これを過ぎたらChromeのデフォルト命名に任せる
 const PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
+const HISTORY_MAX = 5;
 
 // 「ダウンロード時モーダル」で決めた名前を、同時/連続して落ちてくる分割ZIPで
 // 共有するためのグループ。service worker のメモリ上に保持する。
@@ -29,6 +34,15 @@ let promptGroup = null; // { basePromise: Promise<string|null>, seq: number, exp
 chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
   handleFilename(downloadItem, suggest);
   return true; // suggest() を非同期に呼ぶため
+});
+
+// 新規インストール・更新時に初期プリセットを用意する。
+// ユーザーが意図的に空にした配列は上書きしない。
+chrome.runtime.onInstalled.addListener(async () => {
+  const { presets } = await chrome.storage.local.get("presets");
+  if (presets === undefined) {
+    await chrome.storage.local.set({ presets: DEFAULT_PRESETS.slice() });
+  }
 });
 
 async function handleFilename(downloadItem, suggest) {
@@ -47,7 +61,9 @@ async function handleFilename(downloadItem, suggest) {
       "lastProject"
     ]);
     const settings = normalizeSettings(stored.userSettings);
-    const presets = Array.isArray(stored.presets) ? stored.presets : [];
+    const presets = stored.presets === undefined
+      ? DEFAULT_PRESETS.slice()
+      : normalizePresets(stored.presets);
     const lastProject = stored.lastProject ?? "";
     const pendingRename = stored.pendingRename;
     const now = Date.now();
@@ -117,17 +133,25 @@ async function handleFilename(downloadItem, suggest) {
     }
 
     // 同じ操作で分割された後続ZIPは、同じ名前+連番で共有する
-    if (promptGroup && now <= promptGroup.expiresAt) {
-      const base = await promptGroup.basePromise;
+    if (!settings.allowMultiple) {
+      promptGroup = null;
+    }
+
+    if (settings.allowMultiple && promptGroup && now <= promptGroup.expiresAt) {
+      const activeGroup = promptGroup;
+      const base = await activeGroup.basePromise;
       if (!base) {
+        if (promptGroup === activeGroup) promptGroup = null;
         respond();
         return;
       }
-      promptGroup.seq += 1;
-      promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+      activeGroup.seq += 1;
+      if (promptGroup === activeGroup) {
+        promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+      }
       respond({
         filename: withSaveFolder(
-          buildSequencedFilename(base, promptGroup.seq),
+          buildSequencedFilename(base, activeGroup.seq),
           settings.saveFolder
         ),
         conflictAction: settings.conflictAction
@@ -136,24 +160,28 @@ async function handleFilename(downloadItem, suggest) {
     }
 
     // 新しいグループ: モーダルを表示して名前を取得
-    promptGroup = {
+    const currentGroup = {
       seq: 0,
       expiresAt: now + PROMPT_TIMEOUT_MS + MULTI_ZIP_WINDOW_MS,
       basePromise: askForName(settings, presets, lastProject)
     };
+    promptGroup = settings.allowMultiple ? currentGroup : null;
 
-    const base = await promptGroup.basePromise;
-    promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+    const base = await currentGroup.basePromise;
+    if (promptGroup === currentGroup) {
+      promptGroup.expiresAt = Date.now() + MULTI_ZIP_WINDOW_MS;
+    }
 
     if (!base) {
+      if (promptGroup === currentGroup) promptGroup = null;
       respond();
       return;
     }
 
-    promptGroup.seq += 1;
+    currentGroup.seq += 1;
     respond({
       filename: withSaveFolder(
-        buildSequencedFilename(base, promptGroup.seq),
+        buildSequencedFilename(base, currentGroup.seq),
         settings.saveFolder
       ),
       conflictAction: settings.conflictAction
@@ -190,6 +218,8 @@ async function askForName(settings, presets, project) {
       return null;
     }
 
+    await rememberName(resp.name);
+
     // content script が読み取った folder/count を使って権威的に展開する
     return sanitizeZipFilename(
       applyTemplate(resp.name, {
@@ -202,6 +232,27 @@ async function askForName(settings, presets, project) {
   } catch (error) {
     console.warn("Drive Zip Namer: prompt unavailable", error);
     return null;
+  }
+}
+
+/** ダウンロード時ダイアログで確定したテンプレートを履歴へ保存する。 */
+async function rememberName(name) {
+  try {
+    const value = String(name ?? "").trim();
+    if (!value) return;
+
+    const { nameHistory } = await chrome.storage.local.get("nameHistory");
+    const history = [
+      value,
+      ...(Array.isArray(nameHistory) ? nameHistory : []).filter(
+        (item) => typeof item === "string" && item !== value
+      )
+    ].slice(0, HISTORY_MAX);
+
+    await chrome.storage.local.set({ nameHistory: history });
+  } catch (error) {
+    // 履歴保存の失敗で本来のダウンロードを妨げない。
+    console.warn("Drive Zip Namer: failed to save name history", error);
   }
 }
 
@@ -235,8 +286,9 @@ async function findDriveTab() {
 }
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), ms))
-  ]);
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve({ timedOut: true }), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
