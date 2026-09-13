@@ -4,9 +4,13 @@ import {
   DEFAULT_SETTINGS,
   normalizeSettings,
   normalizePresets,
+  normalizeNameHistory,
+  migrateStorageData,
   buildExport,
   parseImport,
-  EXPORT_FORMAT
+  EXPORT_FORMAT,
+  EXPORT_VERSION,
+  STORAGE_SCHEMA_VERSION
 } from "../lib/settings.js";
 
 test("normalizeSettings: 未指定は既定値で埋める", () => {
@@ -24,9 +28,9 @@ test("normalizeSettings: 空の defaultTemplate は既定に戻す", () => {
   assert.equal(normalizeSettings({ defaultTemplate: "{date}_{folder}" }).defaultTemplate, "{date}_{folder}");
 });
 
-test("normalizeSettings: boolean を強制する", () => {
+test("normalizeSettings: 不正なbooleanは安全な既定値へ戻す", () => {
   const s = normalizeSettings({ promptOnDownload: 0, allowMultiple: 1 });
-  assert.equal(s.promptOnDownload, false);
+  assert.equal(s.promptOnDownload, true);
   assert.equal(s.allowMultiple, true);
 });
 
@@ -53,7 +57,7 @@ test("normalizePresets: 配列以外は空配列", () => {
 test("buildExport: 形式とバージョンを含む", () => {
   const data = buildExport({ saveFolder: "x" }, [{ name: "a", template: "b" }]);
   assert.equal(data.format, EXPORT_FORMAT);
-  assert.equal(data.version, 1);
+  assert.equal(data.version, EXPORT_VERSION);
   assert.equal(data.userSettings.saveFolder, "x");
   assert.deepEqual(data.presets, [{ name: "a", template: "b" }]);
 });
@@ -78,8 +82,66 @@ test("parseImport: 別形式の format はエラー", () => {
   );
 });
 
-test("parseImport: format 無しでも寛容に受け入れる", () => {
-  const result = parseImport(JSON.stringify({ userSettings: { saveFolder: "y" } }));
-  assert.equal(result.userSettings.saveFolder, "y");
-  assert.deepEqual(result.presets, []);
+test("parseImport: format や version が無いファイルは拒否する", () => {
+  assert.throws(
+    () => parseImport(JSON.stringify({ userSettings: {}, presets: [] })),
+    /設定ファイル/
+  );
+});
+
+test("parseImport: v0.3のversion 1エクスポートを移行できる", () => {
+  const result = parseImport(
+    JSON.stringify({
+      format: EXPORT_FORMAT,
+      version: 1,
+      userSettings: { saveFolder: "legacy" },
+      presets: []
+    })
+  );
+  assert.equal(result.userSettings.saveFolder, "legacy");
+});
+
+test("parseImport: 将来バージョンと不正な型を拒否する", () => {
+  assert.throws(
+    () =>
+      parseImport(
+        JSON.stringify({
+          format: EXPORT_FORMAT,
+          version: 999,
+          userSettings: {},
+          presets: []
+        })
+      ),
+    /未対応/
+  );
+  assert.throws(
+    () =>
+      parseImport(
+        JSON.stringify({
+          format: EXPORT_FORMAT,
+          version: EXPORT_VERSION,
+          userSettings: { promptOnDownload: "false" },
+          presets: []
+        })
+      ),
+    /promptOnDownload/
+  );
+});
+
+test("migrateStorageData: v0.3の保存値をv1へ正規化する", () => {
+  const migrated = migrateStorageData({
+    userSettings: { promptOnDownload: false },
+    presets: [],
+    nameHistory: [" a ", 42, "a", "b"],
+    lastProject: " Project "
+  });
+  assert.equal(migrated.schemaVersion, STORAGE_SCHEMA_VERSION);
+  assert.equal(migrated.userSettings.promptOnDownload, false);
+  assert.deepEqual(migrated.presets, []);
+  assert.deepEqual(migrated.nameHistory, ["a", "b"]);
+  assert.equal(migrated.lastProject, "Project");
+});
+
+test("normalizeNameHistory: 不正値を除外し重複を削除する", () => {
+  assert.deepEqual(normalizeNameHistory([" x ", null, "x", "y"]), ["x", "y"]);
 });
