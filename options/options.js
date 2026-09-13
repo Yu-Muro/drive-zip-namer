@@ -45,9 +45,12 @@ async function init() {
   if (conflictRadio) conflictRadio.checked = true;
 
   // 初回はプリセット未設定なので例を入れておく
-  presets = stored.presets === undefined
-    ? DEFAULT_PRESETS.slice()
-    : normalizePresets(stored.presets);
+  if (stored.presets === undefined) {
+    presets = DEFAULT_PRESETS.slice();
+    await chrome.storage.local.set({ presets });
+  } else {
+    presets = normalizePresets(stored.presets);
+  }
   renderPresets();
 
   saveButton.addEventListener("click", saveSettings);

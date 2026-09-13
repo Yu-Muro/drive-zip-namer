@@ -1,4 +1,5 @@
 import { sanitizeZipFilename, applyTemplate } from "../lib/filename.js";
+import { DEFAULT_PRESETS, normalizePresets } from "../lib/settings.js";
 
 // 予約の有効期限（ポップアップから設定してからDriveでダウンロードするまでの猶予）
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -31,7 +32,13 @@ async function init() {
   projectInput.value = lastProject ?? "";
   renderStatus(pendingRename);
   renderHistory(nameHistory ?? []);
-  renderPresets(presets ?? []);
+  const availablePresets = presets === undefined
+    ? DEFAULT_PRESETS.slice()
+    : normalizePresets(presets);
+  if (presets === undefined) {
+    await chrome.storage.local.set({ presets: availablePresets });
+  }
+  renderPresets(availablePresets);
 
   filenameInput.addEventListener("input", renderPreview);
   projectInput.addEventListener("input", renderPreview);

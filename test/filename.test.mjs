@@ -107,6 +107,36 @@ test("isGoogleDriveZip: googleusercontent.com 配信も検知する", () => {
   );
 });
 
+test("isGoogleDriveZip: Google管理ドメインのサブドメインを検知する", () => {
+  assert.equal(
+    isGoogleDriveZip({
+      url: "https://doc-00-xx.googleusercontent.com/download",
+      filename: "files.zip"
+    }),
+    true
+  );
+});
+
+test("isGoogleDriveZip: URLのクエリにDrive URLが含まれるだけなら対象外", () => {
+  assert.equal(
+    isGoogleDriveZip({
+      url: "https://example.com/download?next=https://drive.google.com/file",
+      filename: "files.zip"
+    }),
+    false
+  );
+});
+
+test("isGoogleDriveZip: 末尾が似ている別ドメインは対象外", () => {
+  assert.equal(
+    isGoogleDriveZip({
+      url: "https://notgoogleusercontent.com/files.zip",
+      filename: "files.zip"
+    }),
+    false
+  );
+});
+
 test("isGoogleDriveZip: 他サイトのzipは対象外", () => {
   assert.equal(
     isGoogleDriveZip({
