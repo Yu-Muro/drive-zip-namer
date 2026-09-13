@@ -70,6 +70,9 @@ async function handleFilename(downloadItem, suggest) {
     if (answered) return;
     answered = true;
     suggest(arg);
+    if (arg?.filename) {
+      void recordOperation("renamed", "名前を変更しました。", arg.filename);
+    }
   };
 
   try {
@@ -110,6 +113,10 @@ async function handleFilename(downloadItem, suggest) {
       );
       if (!base) {
         await chrome.storage.local.remove("pendingRename");
+        void recordOperation(
+          "error",
+          "テンプレートに未解決または未対応の変数があります。"
+        );
         respond();
         return;
       }
@@ -148,6 +155,7 @@ async function handleFilename(downloadItem, suggest) {
       const base = await activeGroup.basePromise;
       if (!base) {
         inFlightPromptGroups.delete(groupKey);
+        void recordOperation("skipped", "名前入力がキャンセルまたは中断されました。");
         respond();
         return;
       }
@@ -187,6 +195,10 @@ async function handleFilename(downloadItem, suggest) {
 
     // 対象タブを安全に決められない場合、別タブへモーダルを出さない。
     if (!target?.tab?.id) {
+      void recordOperation(
+        "error",
+        "対象のDriveタブを安全に特定できなかったため、元の名前を使用しました。"
+      );
       respond();
       return;
     }
@@ -207,6 +219,7 @@ async function handleFilename(downloadItem, suggest) {
 
     if (!base) {
       if (groupKey) inFlightPromptGroups.delete(groupKey);
+      void recordOperation("skipped", "名前入力がキャンセルまたは中断されました。");
       respond();
       return;
     }
@@ -230,6 +243,7 @@ async function handleFilename(downloadItem, suggest) {
     });
   } catch (error) {
     console.error("Drive Zip Namer: rename failed", error);
+    void recordOperation("error", "名前の変更中にエラーが発生しました。");
     respond();
   }
 }
@@ -250,7 +264,8 @@ async function askForName(settings, presets, project, tab) {
         type: "DZN_PROMPT_ZIP_NAME",
         defaultTemplate: settings.defaultTemplate,
         values,
-        presets
+        presets,
+        timeoutMs: PROMPT_TIMEOUT_MS
       }),
       PROMPT_TIMEOUT_MS
     );
@@ -327,10 +342,37 @@ function dateValues(now) {
 
 function resolveZipTemplate(template, values) {
   const inspected = inspectTemplate(template, values);
-  if (inspected.unknown.length > 0 || inspected.unresolved.length > 0) {
+  if (
+    inspected.malformed ||
+    inspected.unknown.length > 0 ||
+    inspected.unresolved.length > 0
+  ) {
     return null;
   }
   return sanitizeZipFilename(inspected.expanded);
+}
+
+async function recordOperation(status, message, filename = "") {
+  try {
+    await chrome.storage.local.set({
+      lastOperation: {
+        status,
+        message,
+        filename,
+        at: Date.now()
+      }
+    });
+    if (chrome.action?.setBadgeText) {
+      await chrome.action.setBadgeText({ text: status === "renamed" ? "✓" : "!" });
+      if (chrome.action.setBadgeBackgroundColor) {
+        await chrome.action.setBadgeBackgroundColor({
+          color: status === "renamed" ? "#188038" : "#d93025"
+        });
+      }
+    }
+  } catch {
+    // 状態表示の失敗でダウンロードを妨げない。
+  }
 }
 
 function storageSession() {

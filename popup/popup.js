@@ -1,5 +1,13 @@
-import { sanitizeZipFilename, applyTemplate } from "../lib/filename.js";
-import { DEFAULT_PRESETS, normalizePresets } from "../lib/settings.js";
+import {
+  sanitizeZipFilename,
+  applyTemplate,
+  inspectTemplate
+} from "../lib/filename.js";
+import {
+  DEFAULT_PRESETS,
+  normalizeNameHistory,
+  normalizePresets
+} from "../lib/settings.js";
 
 // 予約の有効期限（ポップアップから設定してからDriveでダウンロードするまでの猶予）
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -10,28 +18,33 @@ const presetsEl = document.getElementById("presets");
 const filenameInput = document.getElementById("filename");
 const projectInput = document.getElementById("project");
 const previewEl = document.getElementById("preview");
+const validationErrorEl = document.getElementById("validation-error");
 const saveButton = document.getElementById("save");
 const statusEl = document.getElementById("status");
 const statusTextEl = document.getElementById("status-text");
 const clearButton = document.getElementById("clear");
 const historySection = document.getElementById("history-section");
 const historyList = document.getElementById("history");
+const clearHistoryButton = document.getElementById("clear-history");
+const lastOperationEl = document.getElementById("last-operation");
 const optionsButton = document.getElementById("open-options");
 
 init();
 
 async function init() {
-  const { pendingRename, nameHistory, presets, lastProject } =
+  const { pendingRename, nameHistory, presets, lastProject, lastOperation } =
     await chrome.storage.local.get([
       "pendingRename",
       "nameHistory",
       "presets",
-      "lastProject"
+      "lastProject",
+      "lastOperation"
     ]);
 
   projectInput.value = lastProject ?? "";
   renderStatus(pendingRename);
-  renderHistory(nameHistory ?? []);
+  renderHistory(normalizeNameHistory(nameHistory));
+  renderLastOperation(lastOperation);
   const availablePresets = presets === undefined
     ? DEFAULT_PRESETS.slice()
     : normalizePresets(presets);
@@ -47,6 +60,7 @@ async function init() {
   });
   saveButton.addEventListener("click", save);
   clearButton.addEventListener("click", clearPending);
+  clearHistoryButton.addEventListener("click", clearHistory);
   optionsButton.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
   renderPreview();
@@ -60,15 +74,25 @@ function renderPreview() {
   const raw = filenameInput.value;
   if (!raw.trim()) {
     previewEl.textContent = "";
+    showValidationError("");
+    saveButton.disabled = true;
     return;
   }
+  const inspected = inspectTemplate(raw, currentVars());
+  const error = inspected.malformed
+    ? "変数の波括弧が閉じられていません。"
+    : inspected.unknown.length > 0
+      ? `未対応の変数です: ${inspected.unknown.map((name) => `{${name}}`).join(" ")}`
+      : "";
+  showValidationError(error);
+  saveButton.disabled = Boolean(error);
   // {folder}/{count} はダウンロード時に展開されるため、ここでは残る
   previewEl.textContent = `→ ${sanitizeZipFilename(applyTemplate(raw, currentVars()))}`;
 }
 
 async function save() {
   const raw = filenameInput.value;
-  if (!raw.trim()) {
+  if (!raw.trim() || saveButton.disabled) {
     filenameInput.focus();
     return;
   }
@@ -99,12 +123,20 @@ async function save() {
     nameHistory: history,
     lastProject: project
   });
+  await chrome.action.setBadgeText({ text: "予約" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#1a73e8" });
   window.close();
 }
 
 async function clearPending() {
   await chrome.storage.local.remove("pendingRename");
+  await chrome.action.setBadgeText({ text: "" });
   renderStatus(null);
+}
+
+async function clearHistory() {
+  await chrome.storage.local.remove("nameHistory");
+  renderHistory([]);
 }
 
 function renderStatus(pendingRename) {
@@ -158,4 +190,19 @@ function renderHistory(history) {
       return li;
     })
   );
+}
+
+function renderLastOperation(operation) {
+  if (!operation || typeof operation !== "object") return;
+  const message = typeof operation.message === "string" ? operation.message : "";
+  const filename = typeof operation.filename === "string" ? operation.filename : "";
+  if (!message) return;
+  lastOperationEl.textContent = filename ? `${message} ${filename}` : message;
+  lastOperationEl.classList.toggle("error", operation.status !== "renamed");
+  lastOperationEl.hidden = false;
+}
+
+function showValidationError(message) {
+  validationErrorEl.textContent = message;
+  validationErrorEl.hidden = !message;
 }

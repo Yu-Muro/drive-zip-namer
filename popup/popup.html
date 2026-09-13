@@ -19,14 +19,15 @@
 
     <label for="filename">ZIPファイル名</label>
     <div class="input-row">
-      <input id="filename" type="text" placeholder="例: 2026-07-24_納品データ" autofocus>
+      <input id="filename" type="text" maxlength="500" placeholder="例: 2026-07-24_納品データ" autofocus>
       <span class="ext">.zip</span>
     </div>
     <p class="hint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
     <p id="preview" class="preview"></p>
+    <p id="validation-error" class="validation-error" role="alert" hidden></p>
 
     <label for="project">プロジェクト名（{project}）</label>
-    <input id="project" type="text" placeholder="例: DefaultProject（任意）">
+    <input id="project" type="text" maxlength="120" placeholder="例: DefaultProject（任意）">
 
     <button id="save" class="primary">次のDriveダウンロードに適用</button>
 
@@ -35,8 +36,13 @@
       <button id="clear" class="link">予約をクリア</button>
     </div>
 
+    <div id="last-operation" class="last-operation" hidden aria-live="polite"></div>
+
     <section id="history-section" hidden>
-      <h2>最近使った名前</h2>
+      <div class="section-heading">
+        <h2>最近使った名前</h2>
+        <button id="clear-history" class="link" type="button">履歴を削除</button>
+      </div>
       <ul id="history"></ul>
     </section>
   </main>

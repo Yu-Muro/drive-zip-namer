@@ -185,3 +185,28 @@ h2 {
 .backup-note.error {
   color: #d93025;
 }
+
+.form-error {
+  margin: 6px 0 0;
+  color: #d93025;
+  font-size: 12px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row-actions button {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.row-actions .danger {
+  color: #d93025;
+}
