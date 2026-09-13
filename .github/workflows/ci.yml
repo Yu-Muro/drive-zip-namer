@@ -45,11 +45,11 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run syntax
 
-      - name: Generate icons (reproducibility check)
+      - name: Generate icons
         run: npm run icons
 
-      - name: Verify generated icons are committed
-        run: git diff --exit-code -- assets/icon-16.png assets/icon-48.png assets/icon-128.png
+      - name: Verify image assets
+        run: npm run verify-assets
 
       - name: Build distribution package
         run: npm run package
