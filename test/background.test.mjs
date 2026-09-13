@@ -249,6 +249,41 @@ test("同じタブでも新しいダウンロード操作なら別セッショ�
   assert.equal(app.getPromptCount(), 2);
 });
 
+test("同時に届く予約済み分割ZIPへ重複しない連番を割り当てる", async () => {
+  const now = Date.now();
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: true }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "reserved",
+        createdAt: now,
+        expiresAt: now + 60_000,
+        sequence: 0
+      }
+    }
+  });
+
+  const results = await Promise.all([app.runDownload(), app.runDownload()]);
+  assert.deepEqual(
+    results.map((result) => result.filename),
+    ["reserved.zip", "reserved_part2.zip"]
+  );
+});
+
+test("未解決のテンプレート変数をファイル名へ残さない", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: []
+    },
+    promptResponse: { name: "{folder}_report" }
+  });
+
+  assert.equal(await app.runDownload(), undefined);
+});
+
 test("複数セッションがあり対象タブを特定できなければ命名しない", async () => {
   const now = Date.now();
   const app = await loadBackground({

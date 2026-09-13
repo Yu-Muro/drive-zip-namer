@@ -12,11 +12,13 @@ import {
   buildSequencedFilename,
   withSaveFolder,
   sanitizeZipFilename,
-  applyTemplate
+  inspectTemplate
 } from "./lib/filename.js";
 import { isGoogleDriveZip } from "./lib/drive-detection.js";
 import {
   DEFAULT_PRESETS,
+  migrateStorageData,
+  normalizeNameHistory,
   normalizePresets,
   normalizeSettings
 } from "./lib/settings.js";
@@ -25,7 +27,6 @@ import {
 const MULTI_ZIP_WINDOW_MS = 30 * 1000;
 // モーダルの応答を待つ最大時間。これを過ぎたらChromeのデフォルト命名に任せる
 const PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
-const HISTORY_MAX = 5;
 const SESSION_STORAGE_KEY = "downloadSessions";
 const INTENT_STORAGE_KEY = "downloadIntents";
 const DOWNLOAD_INTENT_TTL_MS = 15 * 1000;
@@ -53,10 +54,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // 新規インストール・更新時に初期プリセットを用意する。
 // ユーザーが意図的に空にした配列は上書きしない。
 chrome.runtime.onInstalled.addListener(async () => {
-  const { presets } = await chrome.storage.local.get("presets");
-  if (presets === undefined) {
-    await chrome.storage.local.set({ presets: DEFAULT_PRESETS.slice() });
-  }
+  const stored = await chrome.storage.local.get([
+    "schemaVersion",
+    "userSettings",
+    "presets",
+    "nameHistory",
+    "lastProject"
+  ]);
+  await chrome.storage.local.set(migrateStorageData(stored));
 });
 
 async function handleFilename(downloadItem, suggest) {
@@ -79,15 +84,13 @@ async function handleFilename(downloadItem, suggest) {
       ? DEFAULT_PRESETS.slice()
       : normalizePresets(stored.presets);
     const lastProject = stored.lastProject ?? "";
-    const pendingRename = stored.pendingRename;
     const now = Date.now();
 
     // --- 1. ポップアップで事前予約されたテンプレートを最優先 ---
-    if (
-      pendingRename?.enabled &&
-      now <= pendingRename.expiresAt &&
-      isGoogleDriveZip(downloadItem)
-    ) {
+    const pendingRename = isGoogleDriveZip(downloadItem)
+      ? await claimPendingRename(now, settings)
+      : null;
+    if (pendingRename) {
       const template = pendingRename.template ?? pendingRename.filename ?? "";
       const reserveDate = new Date(pendingRename.createdAt ?? now);
 
@@ -96,42 +99,30 @@ async function handleFilename(downloadItem, suggest) {
         ? await getDriveContext(downloadItem)
         : {};
 
-      const base = sanitizeZipFilename(
-        applyTemplate(template, {
+      const base = resolveZipTemplate(
+        template,
+        {
           now: reserveDate,
           project: pendingRename.project ?? lastProject,
           folder: context.folder,
           count: context.count
-        })
+        }
       );
+      if (!base) {
+        await chrome.storage.local.remove("pendingRename");
+        respond();
+        return;
+      }
 
-      const sequence = (pendingRename.sequence ?? 0) + 1;
       respond({
         filename: withSaveFolder(
-          buildSequencedFilename(base, sequence),
+          buildSequencedFilename(base, pendingRename.claimedSequence),
           settings.saveFolder
         ),
         conflictAction: settings.conflictAction
       });
 
-      if (settings.allowMultiple) {
-        const firstUsedAt = pendingRename.firstUsedAt ?? now;
-        await chrome.storage.local.set({
-          pendingRename: {
-            ...pendingRename,
-            sequence,
-            firstUsedAt,
-            expiresAt: firstUsedAt + MULTI_ZIP_WINDOW_MS
-          }
-        });
-      } else if (settings.autoClearAfterUse) {
-        await chrome.storage.local.remove("pendingRename");
-      }
       return;
-    }
-
-    if (pendingRename?.enabled && now > pendingRename.expiresAt) {
-      await chrome.storage.local.remove("pendingRename");
     }
 
     // --- Drive由来のZIP以外はChromeに任せる ---
@@ -271,13 +262,14 @@ async function askForName(settings, presets, project, tab) {
     await rememberName(resp.name);
 
     // content script が読み取った folder/count を使って権威的に展開する
-    return sanitizeZipFilename(
-      applyTemplate(resp.name, {
+    return resolveZipTemplate(
+      resp.name,
+      {
         now,
         project,
         folder: resp.folder,
         count: resp.count
-      })
+      }
     );
   } catch (error) {
     console.warn("Drive Zip Namer: prompt unavailable", error);
@@ -292,12 +284,12 @@ async function rememberName(name) {
     if (!value) return;
 
     const { nameHistory } = await chrome.storage.local.get("nameHistory");
-    const history = [
+    const history = normalizeNameHistory([
       value,
       ...(Array.isArray(nameHistory) ? nameHistory : []).filter(
         (item) => typeof item === "string" && item !== value
       )
-    ].slice(0, HISTORY_MAX);
+    ]);
 
     await chrome.storage.local.set({ nameHistory: history });
   } catch (error) {
@@ -333,8 +325,47 @@ function dateValues(now) {
   return { date, time, datetime: `${date}_${time}` };
 }
 
+function resolveZipTemplate(template, values) {
+  const inspected = inspectTemplate(template, values);
+  if (inspected.unknown.length > 0 || inspected.unresolved.length > 0) {
+    return null;
+  }
+  return sanitizeZipFilename(inspected.expanded);
+}
+
 function storageSession() {
   return chrome.storage.session ?? chrome.storage.local;
+}
+
+async function claimPendingRename(now, settings) {
+  return withSessionLock(async () => {
+    const { pendingRename } = await chrome.storage.local.get("pendingRename");
+    if (!pendingRename?.enabled) return null;
+    if (!Number.isFinite(pendingRename.expiresAt) || now > pendingRename.expiresAt) {
+      await chrome.storage.local.remove("pendingRename");
+      return null;
+    }
+
+    const claimedSequence = settings.allowMultiple
+      ? (Number.isInteger(pendingRename.sequence) ? pendingRename.sequence : 0) + 1
+      : 1;
+    if (settings.allowMultiple) {
+      const firstUsedAt = Number.isFinite(pendingRename.firstUsedAt)
+        ? pendingRename.firstUsedAt
+        : now;
+      await chrome.storage.local.set({
+        pendingRename: {
+          ...pendingRename,
+          sequence: claimedSequence,
+          firstUsedAt,
+          expiresAt: firstUsedAt + MULTI_ZIP_WINDOW_MS
+        }
+      });
+    } else if (settings.autoClearAfterUse) {
+      await chrome.storage.local.remove("pendingRename");
+    }
+    return { ...pendingRename, claimedSequence };
+  });
 }
 
 async function rememberDownloadIntent(tab, context) {
