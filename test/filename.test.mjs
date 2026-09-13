@@ -91,6 +91,9 @@ test("inspectTemplate: 未知変数と未解決変数を区別する", () => {
   });
   assert.deepEqual(result.unknown, ["unknown"]);
   assert.deepEqual(result.unresolved, ["folder"]);
+  assert.equal(result.malformed, false);
+  assert.equal(inspectTemplate("bad_{name").malformed, true);
+  assert.equal(inspectTemplate("bad_{}").malformed, true);
 });
 
 test("buildSequencedFilename: 1個目はそのまま、2個目以降は _partN", () => {

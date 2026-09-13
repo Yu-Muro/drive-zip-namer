@@ -6,6 +6,7 @@ import {
   buildExport,
   parseImport
 } from "../lib/settings.js";
+import { inspectTemplate } from "../lib/filename.js";
 
 const defaultTemplateInput = document.getElementById("default-template");
 const saveFolderInput = document.getElementById("save-folder");
@@ -14,11 +15,13 @@ const allowMultipleInput = document.getElementById("allow-multiple");
 const autoClearInput = document.getElementById("auto-clear");
 const saveButton = document.getElementById("save");
 const savedNote = document.getElementById("saved-note");
+const defaultTemplateError = document.getElementById("default-template-error");
 
 const presetsBody = document.getElementById("presets-body");
 const presetNameInput = document.getElementById("preset-name");
 const presetTemplateInput = document.getElementById("preset-template");
 const presetAddBtn = document.getElementById("preset-add-btn");
+const presetError = document.getElementById("preset-error");
 
 const exportBtn = document.getElementById("export-btn");
 const importBtn = document.getElementById("import-btn");
@@ -27,6 +30,7 @@ const backupNote = document.getElementById("backup-note");
 
 // メモリ上のプリセット作業コピー。追加/削除のたびに保存する。
 let presets = [];
+let editingPresetIndex = null;
 
 init();
 
@@ -54,6 +58,9 @@ async function init() {
   renderPresets();
 
   saveButton.addEventListener("click", saveSettings);
+  defaultTemplateInput.addEventListener("input", () => {
+    showFormError(defaultTemplateError, validateTemplate(defaultTemplateInput.value));
+  });
   presetAddBtn.addEventListener("click", addPreset);
   presetTemplateInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") addPreset();
@@ -64,6 +71,12 @@ async function init() {
 }
 
 async function saveSettings() {
+  const templateError = validateTemplate(defaultTemplateInput.value);
+  showFormError(defaultTemplateError, templateError);
+  if (templateError) {
+    defaultTemplateInput.focus();
+    return;
+  }
   const conflictAction =
     document.querySelector('input[name="conflict"]:checked')?.value ??
     DEFAULT_SETTINGS.conflictAction;
@@ -96,15 +109,34 @@ function renderPresets() {
       code.textContent = preset.template;
       tmplTd.appendChild(code);
 
-      const delTd = document.createElement("td");
+      const actionsTd = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = "編集";
+      edit.addEventListener("click", () => editPreset(i));
+      const up = document.createElement("button");
+      up.type = "button";
+      up.textContent = "↑";
+      up.title = "上へ移動";
+      up.disabled = i === 0;
+      up.addEventListener("click", () => movePreset(i, -1));
+      const down = document.createElement("button");
+      down.type = "button";
+      down.textContent = "↓";
+      down.title = "下へ移動";
+      down.disabled = i === presets.length - 1;
+      down.addEventListener("click", () => movePreset(i, 1));
       const del = document.createElement("button");
       del.type = "button";
-      del.className = "link-danger";
+      del.className = "danger";
       del.textContent = "削除";
       del.addEventListener("click", () => removePreset(i));
-      delTd.appendChild(del);
+      actions.append(edit, up, down, del);
+      actionsTd.appendChild(actions);
 
-      tr.append(nameTd, tmplTd, delTd);
+      tr.append(nameTd, tmplTd, actionsTd);
       return tr;
     })
   );
@@ -122,16 +154,50 @@ function renderPresets() {
 async function addPreset() {
   const name = presetNameInput.value.trim();
   const template = presetTemplateInput.value.trim();
-  if (!name || !template) {
+  const templateError = validateTemplate(template);
+  if (!name || !template || templateError) {
+    showFormError(
+      presetError,
+      templateError || "プリセット名とテンプレートを入力してください。"
+    );
     presetNameInput.focus();
     return;
   }
-  presets = normalizePresets([...presets, { name, template }]);
+  if (editingPresetIndex == null) {
+    presets = normalizePresets([...presets, { name, template }]);
+  } else {
+    presets = normalizePresets(
+      presets.map((preset, index) =>
+        index === editingPresetIndex ? { name, template } : preset
+      )
+    );
+  }
+  editingPresetIndex = null;
+  presetAddBtn.textContent = "追加";
+  showFormError(presetError, "");
   presetNameInput.value = "";
   presetTemplateInput.value = "";
   await persistPresets();
   renderPresets();
   presetNameInput.focus();
+}
+
+function editPreset(index) {
+  const preset = presets[index];
+  if (!preset) return;
+  editingPresetIndex = index;
+  presetNameInput.value = preset.name;
+  presetTemplateInput.value = preset.template;
+  presetAddBtn.textContent = "更新";
+  presetNameInput.focus();
+}
+
+async function movePreset(index, direction) {
+  const destination = index + direction;
+  if (destination < 0 || destination >= presets.length) return;
+  [presets[index], presets[destination]] = [presets[destination], presets[index]];
+  await persistPresets();
+  renderPresets();
 }
 
 async function removePreset(index) {
@@ -213,4 +279,24 @@ function showBackupNote(message, isError) {
   backupNote.textContent = message;
   backupNote.classList.toggle("error", isError);
   backupNote.hidden = false;
+}
+
+function validateTemplate(template) {
+  const value = String(template ?? "").trim();
+  if (!value) return "テンプレートを入力してください。";
+  const inspected = inspectTemplate(value, {
+    now: new Date(),
+    project: "project",
+    folder: "folder",
+    count: 1
+  });
+  if (inspected.malformed) return "変数の波括弧が閉じられていません。";
+  return inspected.unknown.length > 0
+    ? `未対応の変数です: ${inspected.unknown.map((name) => `{${name}}`).join(" ")}`
+    : "";
+}
+
+function showFormError(element, message) {
+  element.textContent = message;
+  element.hidden = !message;
 }
