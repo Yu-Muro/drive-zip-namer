@@ -21,12 +21,54 @@
       showModal({
         defaultTemplate: message.defaultTemplate || "",
         presets: Array.isArray(message.presets) ? message.presets : [],
-        values
+        values,
+        timeoutMs: message.timeoutMs
       }).then((result) => sendResponse({ ...result, ...context }));
       return true; // sendResponse を非同期で呼ぶ
     }
     return false;
   });
+
+  // Drive のダウンロード操作と直後に届く downloads イベントを関連付ける。
+  // DOMのクラス名には依存せず、アクセシブル名と表示テキストだけを使う。
+  document.addEventListener(
+    "click",
+    (event) => {
+      const action = event
+        .composedPath()
+        .find(
+          (node) =>
+            node instanceof Element &&
+            (node.matches('button,[role="button"],[role="menuitem"]') ||
+              node.closest?.('button,[role="button"],[role="menuitem"]'))
+        );
+      if (!action) return;
+
+      const control = action.matches('button,[role="button"],[role="menuitem"]')
+        ? action
+        : action.closest('button,[role="button"],[role="menuitem"]');
+      const label = [
+        control.getAttribute("aria-label"),
+        control.getAttribute("title"),
+        control.textContent
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!/(^|\s)(ダウンロード|Download)(\s|$)/i.test(label)) return;
+      chrome.runtime
+        .sendMessage({
+          type: "DZN_REGISTER_DOWNLOAD_INTENT",
+          context: readDriveContext()
+        })
+        .catch(() => {
+          // 登録できなくても、ダウンロード自体は妨げない。
+        });
+    },
+    true
+  );
 
   // --- Drive画面から文脈を読む（ベストエフォート） ---------------------------
 
@@ -45,9 +87,18 @@
   }
 
   function readSelectedCount() {
-    // 選択行はベストエフォートで数える。取得できなければ null。
-    const count = document.querySelectorAll('[aria-selected="true"]').length;
-    return count > 0 ? count : null;
+    // Driveの主要コンテンツ領域だけを対象にし、ナビゲーション等を数えない。
+    const root = document.querySelector('[role="main"]') || document;
+    const selectors = [
+      '[role="grid"] [role="row"][aria-selected="true"]',
+      '[role="grid"] [role="gridcell"][aria-selected="true"]',
+      '[role="listbox"] [role="option"][aria-selected="true"]'
+    ];
+    for (const selector of selectors) {
+      const count = root.querySelectorAll(selector).length;
+      if (count > 0) return count;
+    }
+    return null;
   }
 
   // 表示用の簡易展開（背景の applyTemplate と同じ結果を目指すが、あくまで表示用）
@@ -98,6 +149,7 @@
     .field input:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8; }
     .ext { color: #5f6368; font-size: 14px; }
     .preview { margin: 8px 0 0; font-size: 12px; color: #1a73e8; word-break: break-all; min-height: 1.2em; }
+    .error { margin: 6px 0 0; font-size: 12px; color: #d93025; min-height: 1.2em; }
     .hint { margin: 6px 0 0; font-size: 11px; color: #5f6368; }
     @media (prefers-color-scheme: dark) { .hint { color: #9aa0a6; } }
     .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
@@ -106,10 +158,12 @@
     .cancel:hover { background: rgba(26,115,232,.1); }
     .ok { background: #1a73e8; color: #fff; }
     .ok:hover { background: #1765cc; }
+    .ok:disabled { opacity: .55; cursor: not-allowed; }
   `;
 
-  function showModal({ defaultTemplate, presets, values }) {
+  function showModal({ defaultTemplate, presets, values, timeoutMs = 120000 }) {
     return new Promise((resolve) => {
+      const previouslyFocused = document.activeElement;
       document.getElementById("__dzn-host")?.remove();
 
       const host = document.createElement("div");
@@ -136,16 +190,18 @@
       const overlay = document.createElement("div");
       overlay.className = "overlay";
       overlay.innerHTML = `
-        <div class="dialog" role="dialog" aria-modal="true" aria-label="ZIPファイル名を入力">
-          <h2>ZIPファイル名を入力</h2>
-          <p class="sub">${escapeHtml(ctxNote)}</p>
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dzn-title" aria-describedby="dzn-context dzn-preview dzn-error">
+          <h2 id="dzn-title">ZIPファイル名を入力</h2>
+          <p class="sub" id="dzn-context">${escapeHtml(ctxNote)}</p>
           ${presetChips ? `<div class="presets">${presetChips}</div>` : ""}
           <div class="field">
-            <input id="dzn-name" type="text" placeholder="例: 2026-07-24_納品データ" autocomplete="off" spellcheck="false">
+            <input id="dzn-name" type="text" maxlength="500" placeholder="例: 2026-07-24_納品データ" autocomplete="off" spellcheck="false">
             <span class="ext">.zip</span>
           </div>
-          <p class="preview" id="dzn-preview"></p>
+          <p class="preview" id="dzn-preview" aria-live="polite"></p>
+          <p class="error" id="dzn-error" role="alert"></p>
           <p class="hint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
+          <p class="hint" id="dzn-countdown" aria-live="polite"></p>
           <div class="actions">
             <button class="act cancel" type="button">この名前を使わない</button>
             <button class="act ok" type="button">この名前で保存</button>
@@ -160,14 +216,36 @@
       const preview = shadow.getElementById("dzn-preview");
       const okBtn = shadow.querySelector(".ok");
       const cancelBtn = shadow.querySelector(".cancel");
+      const error = shadow.getElementById("dzn-error");
+      const countdown = shadow.getElementById("dzn-countdown");
+      const deadline = Date.now() + Math.max(1000, timeoutMs);
+      const countdownTimer = setInterval(renderCountdown, 1000);
+      const expiryTimer = setTimeout(
+        () => finish({ timedOut: true }),
+        Math.max(1000, timeoutMs - 250)
+      );
 
       input.value = expand(defaultTemplate, values);
 
       function renderPreview() {
         const raw = input.value.trim();
-        preview.textContent = raw ? `→ ${expand(raw, values)}.zip` : "";
+        const expanded = expand(raw, values);
+        const unresolved = [...expanded.matchAll(/\{([^{}]+)\}/g)].map(
+          (match) => match[0]
+        );
+        const malformed = /[{}]/.test(expanded.replace(/\{[^{}]+\}/g, ""));
+        preview.textContent = raw ? `→ ${expanded}.zip` : "";
+        error.textContent = !raw
+          ? "ファイル名を入力してください。"
+          : malformed
+            ? "変数の波括弧が閉じられていません。"
+            : unresolved.length > 0
+            ? `値を取得できない変数があります: ${[...new Set(unresolved)].join(" ")}`
+            : "";
+        okBtn.disabled = Boolean(error.textContent);
       }
       renderPreview();
+      renderCountdown();
 
       shadow.querySelectorAll(".chip").forEach((chip) => {
         chip.addEventListener("click", () => {
@@ -181,21 +259,41 @@
       });
 
       function cleanup() {
+        clearInterval(countdownTimer);
+        clearTimeout(expiryTimer);
         document.removeEventListener("keydown", onKey, true);
         host.remove();
+        previouslyFocused?.focus?.();
       }
       function confirm() {
-        cleanup();
-        resolve({ name: input.value });
+        if (okBtn.disabled) {
+          input.focus();
+          return;
+        }
+        finish({ name: input.value });
       }
       function cancel() {
+        finish({ cancelled: true });
+      }
+      function finish(result) {
         cleanup();
-        resolve({ cancelled: true });
+        resolve(result);
+      }
+      function renderCountdown() {
+        const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        countdown.textContent = `残り ${seconds} 秒で元のファイル名を使用します。`;
       }
       function onKey(e) {
         if (e.key === "Escape") {
           e.preventDefault();
           cancel();
+        } else if (e.key === "Tab") {
+          const controls = [input, cancelBtn, okBtn].filter((item) => !item.disabled);
+          const current = controls.indexOf(shadow.activeElement);
+          const direction = e.shiftKey ? -1 : 1;
+          const next = (current + direction + controls.length) % controls.length;
+          e.preventDefault();
+          controls[next].focus();
         }
       }
 

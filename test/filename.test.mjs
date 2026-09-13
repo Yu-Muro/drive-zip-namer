@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   sanitizeZipFilename,
   applyTemplate,
+  inspectTemplate,
   buildSequencedFilename,
-  withSaveFolder
+  withSaveFolder,
+  MAX_FILENAME_BYTES
 } from "../lib/filename.js";
 import { isGoogleDriveZip } from "../lib/drive-detection.js";
 
@@ -33,6 +35,19 @@ test("sanitizeZipFilename: 末尾のドットと空白を除去する", () => {
 
 test("sanitizeZipFilename: 連続空白を1つにまとめる", () => {
   assert.equal(sanitizeZipFilename("a   b"), "a b.zip");
+});
+
+test("sanitizeZipFilename: Windows予約名と制御文字を安全化する", () => {
+  assert.equal(sanitizeZipFilename("CON"), "_CON.zip");
+  assert.equal(sanitizeZipFilename("nul.txt"), "_nul.txt.zip");
+  assert.equal(sanitizeZipFilename("report\u007f\u0085name"), "reportname.zip");
+});
+
+test("sanitizeZipFilename: UnicodeをNFCへ正規化して最大長に収める", () => {
+  assert.equal(sanitizeZipFilename("e\u0301"), "é.zip");
+  const result = sanitizeZipFilename("あ".repeat(200));
+  assert.ok(new TextEncoder().encode(result).length <= MAX_FILENAME_BYTES);
+  assert.ok(result.endsWith(".zip"));
 });
 
 test("applyTemplate: {date} {time} {datetime} を展開する", () => {
@@ -70,10 +85,27 @@ test("applyTemplate: 第2引数に Date を渡す後方互換が保たれる", (
   assert.equal(applyTemplate("{datetime}", now), "2026-07-24_1430");
 });
 
+test("inspectTemplate: 未知変数と未解決変数を区別する", () => {
+  const result = inspectTemplate("{date}_{folder}_{unknown}", {
+    now: new Date(2026, 6, 24)
+  });
+  assert.deepEqual(result.unknown, ["unknown"]);
+  assert.deepEqual(result.unresolved, ["folder"]);
+  assert.equal(result.malformed, false);
+  assert.equal(inspectTemplate("bad_{name").malformed, true);
+  assert.equal(inspectTemplate("bad_{}").malformed, true);
+});
+
 test("buildSequencedFilename: 1個目はそのまま、2個目以降は _partN", () => {
   assert.equal(buildSequencedFilename("納品データ.zip", 1), "納品データ.zip");
   assert.equal(buildSequencedFilename("納品データ.zip", 2), "納品データ_part2.zip");
   assert.equal(buildSequencedFilename("納品データ.zip", 3), "納品データ_part3.zip");
+});
+
+test("buildSequencedFilename: 長い名前でもpart番号と拡張子を維持する", () => {
+  const result = buildSequencedFilename(`${"あ".repeat(200)}.zip`, 12);
+  assert.ok(result.endsWith("_part12.zip"));
+  assert.ok(new TextEncoder().encode(result).length <= MAX_FILENAME_BYTES);
 });
 
 test("withSaveFolder: サブフォルダを付ける", () => {
@@ -84,6 +116,7 @@ test("withSaveFolder: サブフォルダを付ける", () => {
 
 test("withSaveFolder: フォルダ名の危険な文字も安全化する", () => {
   assert.equal(withSaveFolder("a.zip", "..\\evil"), "_evil/a.zip");
+  assert.equal(withSaveFolder("a.zip", "CON"), "_CON/a.zip");
 });
 
 test("isGoogleDriveZip: drive.google.com のzipを検知する", () => {

@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Drive Zip Namer** (last updated: 2026-07-24)
+**Drive Zip Namer** (last updated: 2026-09-13)
 
 ## 日本語
 
@@ -8,6 +8,8 @@ Drive Zip Namer は、ユーザーのプライバシーを尊重します。
 
 - 本拡張機能は、ユーザーが入力した ZIP ファイル名と設定を **ブラウザ内
   （`chrome.storage.local`）にのみ** 保存します。
+- 分割 ZIP の一時的な命名状態はブラウザセッション内（`chrome.storage.session`）に
+  保存し、ブラウザを終了すると削除されます。
 - ダウンロードされるファイルの **内容を読み取りません**。変更するのは保存時の
   ファイル名のみです。
 - いかなるデータも **外部サーバーへ送信しません**。アナリティクス・トラッキングは
@@ -25,6 +27,8 @@ Drive Zip Namer respects your privacy.
 
 - The extension stores the ZIP filenames you enter and your settings **only inside
   your browser** (`chrome.storage.local`).
+- Temporary naming state for split ZIP downloads is stored in the browser session
+  (`chrome.storage.session`) and is removed when the browser exits.
 - It **never reads the contents** of downloaded files. It only changes the filename
   used when saving.
 - It sends **no data to any external server**. There are no analytics or tracking.

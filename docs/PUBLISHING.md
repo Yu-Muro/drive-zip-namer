@@ -11,6 +11,7 @@ Drive Zip Namer を Chrome Web Store に公開・更新するための手順書�
 
 - [ ] `npm test` が通る（CI でも自動確認）
 - [ ] `npm run validate`（manifest ↔ package.json のバージョン整合など）
+- [ ] `npm run release:check` が通る（構文・配布ZIP内容を含む全検査）
 - [ ] `manifest.json` / `package.json` の `version` を今回の公開版に更新済み
 - [ ] `npm run package` で `dist/drive-zip-namer-<version>.zip` を生成
       （`assets/store/` は同梱されない＝ストア画像は拡張機能に含めない）
@@ -95,3 +96,4 @@ Drive Zip Namer を Chrome Web Store に公開・更新するための手順書�
 - [ ] プライバシーポリシー URL を設定
 - [ ] 単一用途・権限の正当性・データ利用を記入
 - [ ] まず限定公開でテスト
+- [ ] `V1_RELEASE_CHECKLIST.md` の実環境スモークテストを完了
