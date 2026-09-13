@@ -306,3 +306,117 @@ test("複数セッションがあり対象タブを特定できなければ命�
   assert.equal(await app.runDownload(), undefined);
   assert.equal(app.getPromptCount(), 0);
 });
+
+test("Drive以外のZIPには一切介入しない", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings(),
+      presets: []
+    }
+  });
+
+  assert.equal(
+    await app.runDownload({
+      url: "https://example.com/archive.zip",
+      filename: "archive.zip"
+    }),
+    undefined
+  );
+  assert.equal(app.getPromptCount(), 0);
+});
+
+test("ダウンロード時入力が無効なら予約なしのDrive ZIPへ介入しない", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ promptOnDownload: false }),
+      presets: []
+    }
+  });
+
+  assert.equal(await app.runDownload(), undefined);
+  assert.equal(app.getPromptCount(), 0);
+});
+
+test("予約テンプレートへDrive文脈と保存設定を反映する", async () => {
+  const now = Date.now();
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({
+        allowMultiple: false,
+        saveFolder: "Drive exports",
+        conflictAction: "overwrite"
+      }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "{project}_{folder}_{count}",
+        project: "Apollo",
+        createdAt: now,
+        expiresAt: now + 60_000
+      }
+    }
+  });
+  await app.registerIntent(1, { folder: "Invoices", count: 3 });
+
+  assert.deepEqual(await app.runDownload(), {
+    filename: "Drive exports/Apollo_Invoices_3.zip",
+    conflictAction: "overwrite"
+  });
+  assert.equal(app.storage.pendingRename, undefined);
+  assert.equal(app.getPromptCount(), 0);
+});
+
+test("期限切れ予約を削除して通常の名前入力へ進む", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "expired",
+        createdAt: Date.now() - 120_000,
+        expiresAt: Date.now() - 60_000
+      }
+    }
+  });
+
+  assert.equal((await app.runDownload()).filename, "sample.zip");
+  assert.equal(app.storage.pendingRename, undefined);
+  assert.equal(app.getPromptCount(), 1);
+});
+
+test("referrerと一致するDriveタブへ名前入力を表示する", async () => {
+  const tabs = [
+    { id: 1, windowId: 1, active: true, url: "https://drive.google.com/drive/folders/a" },
+    { id: 2, windowId: 2, active: true, url: "https://drive.google.com/drive/folders/b" }
+  ];
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: []
+    },
+    tabs,
+    promptResponse: (tabId) => ({ name: `tab-${tabId}` })
+  });
+
+  const result = await app.runDownload({
+    url: "https://drive.google.com/uc?export=download",
+    referrer: "https://drive.google.com/drive/folders/b",
+    filename: "drive-download.zip"
+  });
+  assert.equal(result.filename, "tab-2.zip");
+});
+
+test("名前入力のキャンセル時は元の名前を使い理由を保存する", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: []
+    },
+    promptResponse: { cancelled: true }
+  });
+
+  assert.equal(await app.runDownload(), undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.storage.lastOperation.status, "skipped");
+});

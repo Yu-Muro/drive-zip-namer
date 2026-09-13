@@ -28,6 +28,9 @@ if (manifest) {
     errors.push(`manifest.version が semver ではありません（現在: ${manifest.version}）`);
   }
   if (!manifest.name) errors.push("manifest.name が空です");
+  if (Number(manifest.minimum_chrome_version) < 102) {
+    errors.push("storage.session を使用するため Chrome 102 以降を指定してください");
+  }
   if (!manifest.background?.service_worker) {
     errors.push("background.service_worker が未設定です");
   }

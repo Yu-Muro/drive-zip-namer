@@ -40,13 +40,22 @@ jobs:
           node-version: "26"
 
       - name: Validate manifest.json and version consistency
-        run: node scripts/validate-manifest.mjs
+        run: npm run validate
+
+      - name: Check JavaScript syntax
+        run: npm run syntax
 
       - name: Generate icons (reproducibility check)
         run: npm run icons
 
+      - name: Verify generated icons are committed
+        run: git diff --exit-code -- assets/icon-16.png assets/icon-48.png assets/icon-128.png
+
       - name: Build distribution package
         run: npm run package
+
+      - name: Verify distribution package
+        run: npm run verify-package
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4

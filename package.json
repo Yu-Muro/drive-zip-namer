@@ -1,14 +1,18 @@
 {
   "name": "drive-zip-namer",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Chrome extension that renames ZIP files downloaded from Google Drive",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test",
     "validate": "node scripts/validate-manifest.mjs",
+    "syntax": "node scripts/check-syntax.mjs",
+    "check": "npm test && npm run validate && npm run syntax",
     "icons": "node scripts/generate-icons.mjs",
-    "package": "bash scripts/package.sh"
+    "package": "bash scripts/package.sh",
+    "verify-package": "node scripts/verify-package.mjs",
+    "release:check": "npm run check && npm run package && npm run verify-package"
   },
   "license": "MIT"
 }
