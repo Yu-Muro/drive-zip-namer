@@ -4,6 +4,7 @@
 
 ### Added
 
+- Chrome の表示言語に連動する日本語・英語 UI
 - Manifest V3 service worker の再起動に耐える分割 ZIP セッション
 - Drive のダウンロード操作と対象タブの関連付け
 - 直近の命名結果と失敗理由の表示

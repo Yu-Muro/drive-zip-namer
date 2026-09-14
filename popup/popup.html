@@ -8,40 +8,40 @@
 <body>
   <header>
     <h1>Drive Zip Namer</h1>
-    <button id="open-options" title="設定" aria-label="設定">⚙</button>
+    <button id="open-options" data-i18n-title="options" data-i18n-aria-label="options" title="設定" aria-label="設定">⚙</button>
   </header>
 
   <main>
     <section id="presets-section" hidden>
-      <label>プリセット</label>
+      <label data-i18n="presets">プリセット</label>
       <div id="presets" class="presets"></div>
     </section>
 
-    <label for="filename">ZIPファイル名</label>
+    <label for="filename" data-i18n="zipFilename">ZIPファイル名</label>
     <div class="input-row">
-      <input id="filename" type="text" maxlength="500" placeholder="例: 2026-07-24_納品データ" autofocus>
+      <input id="filename" type="text" maxlength="500" data-i18n-placeholder="filenamePlaceholder" placeholder="例: 2026-07-24_納品データ" autofocus>
       <span class="ext">.zip</span>
     </div>
-    <p class="hint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
+    <p class="hint" data-i18n="templateHint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
     <p id="preview" class="preview"></p>
     <p id="validation-error" class="validation-error" role="alert" hidden></p>
 
-    <label for="project">プロジェクト名（{project}）</label>
-    <input id="project" type="text" maxlength="120" placeholder="例: DefaultProject（任意）">
+    <label for="project" data-i18n="projectLabel">プロジェクト名（{project}）</label>
+    <input id="project" type="text" maxlength="120" data-i18n-placeholder="projectPlaceholder" placeholder="例: DefaultProject（任意）">
 
-    <button id="save" class="primary">次のDriveダウンロードに適用</button>
+    <button id="save" class="primary" data-i18n="applyNextDownload">次のDriveダウンロードに適用</button>
 
     <div id="status" class="status" hidden>
       <p id="status-text"></p>
-      <button id="clear" class="link">予約をクリア</button>
+      <button id="clear" class="link" data-i18n="clearReservation">予約をクリア</button>
     </div>
 
     <div id="last-operation" class="last-operation" hidden aria-live="polite"></div>
 
     <section id="history-section" hidden>
       <div class="section-heading">
-        <h2>最近使った名前</h2>
-        <button id="clear-history" class="link" type="button">履歴を削除</button>
+        <h2 data-i18n="recentNames">最近使った名前</h2>
+        <button id="clear-history" class="link" type="button" data-i18n="clearHistory">履歴を削除</button>
       </div>
       <ul id="history"></ul>
     </section>

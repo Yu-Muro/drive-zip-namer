@@ -16,11 +16,14 @@ const required = [
   "manifest.json",
   "background.js",
   "content/drive-content.js",
+  "_locales/ja/messages.json",
+  "_locales/en/messages.json",
   "popup/popup.html",
   "popup/popup.js",
   "options/options.html",
   "options/options.js",
   "lib/filename.js",
+  "lib/i18n.js",
   "lib/settings.js"
 ];
 const forbidden = entries.filter(

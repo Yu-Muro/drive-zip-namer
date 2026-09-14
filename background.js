@@ -22,6 +22,7 @@ import {
   normalizePresets,
   normalizeSettings
 } from "./lib/settings.js";
+import { t } from "./lib/i18n.js";
 
 // 分割ZIP対応: 最初のZIP検知からこの時間内に来た後続ZIPには同じ名前+連番を使う
 const MULTI_ZIP_WINDOW_MS = 30 * 1000;
@@ -71,7 +72,7 @@ async function handleFilename(downloadItem, suggest) {
     answered = true;
     suggest(arg);
     if (arg?.filename) {
-      void recordOperation("renamed", "名前を変更しました。", arg.filename);
+      void recordOperation("renamed", t("renamed"), arg.filename);
     }
   };
 
@@ -143,7 +144,7 @@ async function handleFilename(downloadItem, suggest) {
       if (fallbackTemplate != null) {
         void recordOperation(
           "error",
-          "テンプレートを自動展開できず、名前入力も無効なため元の名前を使用しました。"
+          t("expansionFailed")
         );
       }
       respond();
@@ -164,7 +165,7 @@ async function handleFilename(downloadItem, suggest) {
       const base = await activeGroup.basePromise;
       if (!base) {
         inFlightPromptGroups.delete(groupKey);
-        void recordOperation("skipped", "名前入力がキャンセルまたは中断されました。");
+        void recordOperation("skipped", t("promptCancelled"));
         respond();
         return;
       }
@@ -206,7 +207,7 @@ async function handleFilename(downloadItem, suggest) {
     if (!target?.tab?.id) {
       void recordOperation(
         "error",
-        "対象のDriveタブを安全に特定できなかったため、元の名前を使用しました。"
+        t("driveTabNotFound")
       );
       respond();
       return;
@@ -234,7 +235,7 @@ async function handleFilename(downloadItem, suggest) {
 
     if (!base) {
       if (groupKey) inFlightPromptGroups.delete(groupKey);
-      void recordOperation("skipped", "名前入力がキャンセルまたは中断されました。");
+      void recordOperation("skipped", t("promptCancelled"));
       respond();
       return;
     }
@@ -258,7 +259,7 @@ async function handleFilename(downloadItem, suggest) {
     });
   } catch (error) {
     console.error("Drive Zip Namer: rename failed", error);
-    void recordOperation("error", "名前の変更中にエラーが発生しました。");
+    void recordOperation("error", t("renameFailed"));
     respond();
   }
 }

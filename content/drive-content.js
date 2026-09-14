@@ -10,6 +10,32 @@
   if (window.__driveZipNamerInjected) return;
   window.__driveZipNamerInjected = true;
 
+  const FALLBACK_MESSAGES = {
+    dialogContext: "フォルダ: $1 / 選択数: $2",
+    dialogContextDefault: "Google Drive からダウンロードする ZIP の保存名を指定します",
+    dialogTitle: "ZIPファイル名を入力",
+    filenamePlaceholder: "例: 2026-07-24_納品データ",
+    templateHint: "{date} {time} {datetime} {project} {folder} {count} が使えます",
+    cancelName: "この名前を使わない",
+    confirmName: "この名前で保存",
+    filenameRequired: "ファイル名を入力してください。",
+    unmatchedBrace: "変数の波括弧が閉じられていません。",
+    unresolvedVariables: "値を取得できない変数があります: $1",
+    countdown: "残り $1 秒で元のファイル名を使用します。"
+  };
+
+  function t(key, substitutions = []) {
+    const values = (Array.isArray(substitutions) ? substitutions : [substitutions]).map(
+      String
+    );
+    const translated = chrome.i18n?.getMessage?.(key, values);
+    const template = translated || FALLBACK_MESSAGES[key] || key;
+    return values.reduce(
+      (message, value, index) => message.replaceAll(`$${index + 1}`, String(value)),
+      template
+    );
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "DZN_GET_DRIVE_CONTEXT") {
       sendResponse(readDriveContext());
@@ -204,8 +230,8 @@
 
       const ctxNote =
         values.folder || values.count
-          ? `フォルダ: ${values.folder ?? "-"} / 選択数: ${values.count ?? "-"}`
-          : "Google Drive からダウンロードする ZIP の保存名を指定します";
+          ? t("dialogContext", [values.folder ?? "-", values.count ?? "-"])
+          : t("dialogContextDefault");
 
       const presetChips = presets
         .map(
@@ -220,20 +246,20 @@
       overlay.className = "overlay";
       overlay.innerHTML = `
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dzn-title" aria-describedby="dzn-context dzn-preview dzn-error">
-          <h2 id="dzn-title">ZIPファイル名を入力</h2>
+          <h2 id="dzn-title">${escapeHtml(t("dialogTitle"))}</h2>
           <p class="sub" id="dzn-context">${escapeHtml(ctxNote)}</p>
           ${presetChips ? `<div class="presets">${presetChips}</div>` : ""}
           <div class="field">
-            <input id="dzn-name" type="text" maxlength="500" placeholder="例: 2026-07-24_納品データ" autocomplete="off" spellcheck="false">
+            <input id="dzn-name" type="text" maxlength="500" placeholder="${escapeHtml(t("filenamePlaceholder"))}" autocomplete="off" spellcheck="false">
             <span class="ext">.zip</span>
           </div>
           <p class="preview" id="dzn-preview" aria-live="polite"></p>
           <p class="error" id="dzn-error" role="alert"></p>
-          <p class="hint">{date} {time} {datetime} {project} {folder} {count} が使えます</p>
+          <p class="hint">${escapeHtml(t("templateHint"))}</p>
           <p class="hint" id="dzn-countdown" aria-live="polite"></p>
           <div class="actions">
-            <button class="act cancel" type="button">この名前を使わない</button>
-            <button class="act ok" type="button">この名前で保存</button>
+            <button class="act cancel" type="button">${escapeHtml(t("cancelName"))}</button>
+            <button class="act ok" type="button">${escapeHtml(t("confirmName"))}</button>
           </div>
         </div>
       `;
@@ -265,11 +291,11 @@
         const malformed = /[{}]/.test(expanded.replace(/\{[^{}]+\}/g, ""));
         preview.textContent = raw ? `→ ${expanded}.zip` : "";
         error.textContent = !raw
-          ? "ファイル名を入力してください。"
+          ? t("filenameRequired")
           : malformed
-            ? "変数の波括弧が閉じられていません。"
+            ? t("unmatchedBrace")
             : unresolved.length > 0
-            ? `値を取得できない変数があります: ${[...new Set(unresolved)].join(" ")}`
+            ? t("unresolvedVariables", [...new Set(unresolved)].join(" "))
             : "";
         okBtn.disabled = Boolean(error.textContent);
       }
@@ -310,7 +336,7 @@
       }
       function renderCountdown() {
         const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-        countdown.textContent = `残り ${seconds} 秒で元のファイル名を使用します。`;
+        countdown.textContent = t("countdown", seconds);
       }
       function onKey(e) {
         if (e.key === "Escape") {

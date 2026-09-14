@@ -15,6 +15,7 @@ zip -r "$OUT_DIR/$OUT" \
   manifest.json \
   background.js \
   content \
+  _locales \
   popup \
   options \
   lib \

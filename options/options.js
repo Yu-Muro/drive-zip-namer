@@ -7,6 +7,7 @@ import {
   parseImport
 } from "../lib/settings.js";
 import { inspectTemplate } from "../lib/filename.js";
+import { localizeDocument, t } from "../lib/i18n.js";
 
 const defaultTemplateInput = document.getElementById("default-template");
 const saveFolderInput = document.getElementById("save-folder");
@@ -32,6 +33,7 @@ const backupNote = document.getElementById("backup-note");
 let presets = [];
 let editingPresetIndex = null;
 
+localizeDocument();
 init();
 
 async function init() {
@@ -114,24 +116,24 @@ function renderPresets() {
       actions.className = "row-actions";
       const edit = document.createElement("button");
       edit.type = "button";
-      edit.textContent = "編集";
+      edit.textContent = t("edit");
       edit.addEventListener("click", () => editPreset(i));
       const up = document.createElement("button");
       up.type = "button";
       up.textContent = "↑";
-      up.title = "上へ移動";
+      up.title = t("moveUp");
       up.disabled = i === 0;
       up.addEventListener("click", () => movePreset(i, -1));
       const down = document.createElement("button");
       down.type = "button";
       down.textContent = "↓";
-      down.title = "下へ移動";
+      down.title = t("moveDown");
       down.disabled = i === presets.length - 1;
       down.addEventListener("click", () => movePreset(i, 1));
       const del = document.createElement("button");
       del.type = "button";
       del.className = "danger";
-      del.textContent = "削除";
+      del.textContent = t("delete");
       del.addEventListener("click", () => removePreset(i));
       actions.append(edit, up, down, del);
       actionsTd.appendChild(actions);
@@ -145,7 +147,7 @@ function renderPresets() {
     const td = document.createElement("td");
     td.colSpan = 3;
     td.className = "empty";
-    td.textContent = "プリセットはまだありません。";
+    td.textContent = t("noPresets");
     tr.appendChild(td);
     presetsBody.appendChild(tr);
   }
@@ -158,7 +160,7 @@ async function addPreset() {
   if (!name || !template || templateError) {
     showFormError(
       presetError,
-      templateError || "プリセット名とテンプレートを入力してください。"
+      templateError || t("presetRequired")
     );
     presetNameInput.focus();
     return;
@@ -173,7 +175,7 @@ async function addPreset() {
     );
   }
   editingPresetIndex = null;
-  presetAddBtn.textContent = "追加";
+  presetAddBtn.textContent = t("add");
   showFormError(presetError, "");
   presetNameInput.value = "";
   presetTemplateInput.value = "";
@@ -188,7 +190,7 @@ function editPreset(index) {
   editingPresetIndex = index;
   presetNameInput.value = preset.name;
   presetTemplateInput.value = preset.template;
-  presetAddBtn.textContent = "更新";
+  presetAddBtn.textContent = t("update");
   presetNameInput.focus();
 }
 
@@ -225,7 +227,7 @@ async function exportSettings() {
   a.click();
   URL.revokeObjectURL(url);
 
-  showBackupNote("設定をエクスポートしました。", false);
+  showBackupNote(t("exported"), false);
 }
 
 function importSettings(event) {
@@ -244,9 +246,9 @@ function importSettings(event) {
       presets = importedPresets;
       applySettingsToForm(userSettings);
       renderPresets();
-      showBackupNote("設定をインポートしました。", false);
+      showBackupNote(t("imported"), false);
     } catch (error) {
-      showBackupNote(`インポートに失敗しました: ${error.message}`, true);
+      showBackupNote(t("importFailed", error.message), true);
     } finally {
       importFile.value = "";
     }
@@ -283,16 +285,19 @@ function showBackupNote(message, isError) {
 
 function validateTemplate(template) {
   const value = String(template ?? "").trim();
-  if (!value) return "テンプレートを入力してください。";
+  if (!value) return t("templateRequired");
   const inspected = inspectTemplate(value, {
     now: new Date(),
     project: "project",
     folder: "folder",
     count: 1
   });
-  if (inspected.malformed) return "変数の波括弧が閉じられていません。";
+  if (inspected.malformed) return t("unmatchedBrace");
   return inspected.unknown.length > 0
-    ? `未対応の変数です: ${inspected.unknown.map((name) => `{${name}}`).join(" ")}`
+    ? t(
+        "unsupportedVariables",
+        inspected.unknown.map((name) => `{${name}}`).join(" ")
+      )
     : "";
 }
 

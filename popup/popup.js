@@ -8,6 +8,7 @@ import {
   normalizeNameHistory,
   normalizePresets
 } from "../lib/settings.js";
+import { localizeDocument, t } from "../lib/i18n.js";
 
 // 予約の有効期限（ポップアップから設定してからDriveでダウンロードするまでの猶予）
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -29,6 +30,7 @@ const clearHistoryButton = document.getElementById("clear-history");
 const lastOperationEl = document.getElementById("last-operation");
 const optionsButton = document.getElementById("open-options");
 
+localizeDocument();
 init();
 
 async function init() {
@@ -80,9 +82,12 @@ function renderPreview() {
   }
   const inspected = inspectTemplate(raw, currentVars());
   const error = inspected.malformed
-    ? "変数の波括弧が閉じられていません。"
+    ? t("unmatchedBrace")
     : inspected.unknown.length > 0
-      ? `未対応の変数です: ${inspected.unknown.map((name) => `{${name}}`).join(" ")}`
+      ? t(
+          "unsupportedVariables",
+          inspected.unknown.map((name) => `{${name}}`).join(" ")
+        )
       : "";
   showValidationError(error);
   saveButton.disabled = Boolean(error);
@@ -123,7 +128,7 @@ async function save() {
     nameHistory: history,
     lastProject: project
   });
-  await chrome.action.setBadgeText({ text: "予約" });
+  await chrome.action.setBadgeText({ text: t("reservationBadge") });
   await chrome.action.setBadgeBackgroundColor({ color: "#1a73e8" });
   window.close();
 }
@@ -152,7 +157,7 @@ function renderStatus(pendingRename) {
         project: pendingRename.project
       })
     );
-    statusTextEl.textContent = `予約中: ${preview}（あと約${remainMin}分有効）`;
+    statusTextEl.textContent = t("reservationActive", [preview, remainMin]);
   }
 }
 
@@ -181,7 +186,7 @@ function renderHistory(history) {
     ...history.map((name) => {
       const li = document.createElement("li");
       li.textContent = name;
-      li.title = "クリックして入力欄にセット";
+      li.title = t("historyItemTitle");
       li.addEventListener("click", () => {
         filenameInput.value = name;
         filenameInput.focus();

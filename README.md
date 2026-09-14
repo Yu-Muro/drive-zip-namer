@@ -6,6 +6,7 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 （`drive-download-20260724T031500Z-001.zip` のような自動命名）を、**自分で決めた名前で保存できる** Chrome 拡張機能です。
 
 このブランチのバージョンは **v1.0.0** です。Chrome 102 以降に対応しています。
+画面は Chrome の表示言語に合わせて日本語または英語で表示されます。
 
 <p align="center">
   <img src="assets/icon-128.png" alt="Drive Zip Namer icon" width="96">
@@ -77,6 +78,7 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 - 案件別プリセットの管理
 - 設定のエクスポート / インポート
 - 直近の命名結果・失敗理由の確認と履歴削除
+- Chrome の表示言語に連動する日本語・英語 UI
 
 ## Chrome Web Store への公開
 
