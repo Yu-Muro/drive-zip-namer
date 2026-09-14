@@ -1,0 +1,84 @@
+name: 不具合報告
+description: 再現可能な問題や意図しない動作を報告します
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不具合の報告ありがとうございます。調査に必要な情報を入力してください。
+        個人情報や機密情報は記載しないでください。
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: 拡張機能のバージョン
+      description: 拡張機能の管理画面に表示されているバージョンを入力してください。
+      placeholder: 例）1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chromeのバージョン
+      description: chrome://version に表示されているバージョンを入力してください。
+      placeholder: 例）140.0.0.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 利用環境
+      description: OS、Google Driveの表示言語など、問題に関係しそうな情報を入力してください。
+      placeholder: |
+        OS: macOS 26
+        Google Driveの表示言語: 日本語
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 問題を再現できる手順を、できるだけ具体的に入力してください。
+      placeholder: |
+        1. Google Driveで複数のファイルを選択する
+        2. 「ダウンロード」を押す
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+      description: 本来どのように動作してほしかったかを入力してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+      description: 実際に起きたことや表示されたエラーを入力してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 補足情報
+      description: スクリーンショット、ログ、発生頻度、回避策などがあれば追加してください。
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存のIssueに同じ内容がないことを確認しました。
+          required: true
+        - label: 個人情報や機密情報を含めていません。
+          required: true
