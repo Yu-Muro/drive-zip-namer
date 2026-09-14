@@ -4,6 +4,9 @@
   "description": "Chrome extension that renames ZIP files downloaded from Google Drive",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "test": "node --test",
     "validate": "node scripts/validate-manifest.mjs",
