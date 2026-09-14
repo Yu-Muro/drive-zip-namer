@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
     branches: ["**"]
 
@@ -11,19 +9,15 @@ permissions:
 
 jobs:
   test:
-    name: Test (Node ${{ matrix.node }})
+    name: Test (Node 26)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ["20", "22", "26"]
     steps:
       - uses: actions/checkout@v7
 
-      - name: Setup Node.js ${{ matrix.node }}
+      - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "26"
 
       - name: Run unit tests
         run: npm test

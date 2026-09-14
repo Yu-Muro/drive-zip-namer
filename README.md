@@ -5,7 +5,9 @@
 Google Drive で複数ファイルを選択してダウンロードしたときに生成される ZIP ファイル
 （`drive-download-20260724T031500Z-001.zip` のような自動命名）を、**自分で決めた名前で保存できる** Chrome 拡張機能です。
 
-このブランチのバージョンは **v1.0.0** です。Chrome 102 以降に対応しています。
+[Chrome Web Store からインストール](https://chromewebstore.google.com/detail/drive-zip-namer/ochphpogjlockibdajlipdhojmnghaem)
+
+現在のリリースは **v1.0.0** です。Chrome 102 以降に対応しています。
 画面は Chrome の表示言語に合わせて日本語または英語で表示されます。
 
 <p align="center">
@@ -55,6 +57,11 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 よく使う命名テンプレートを「請求書」「納品データ」などの名前で保存しておき、ポップアップや
 ダウンロード時ダイアログからワンクリックで呼び出せます。オプション画面で追加・編集・削除・並べ替えができます。
 
+### 最近使った名前
+
+直近で使った名前を最大 5 件保存し、ポップアップからワンクリックで再利用できます。
+最後の命名結果や、名前を変更できなかった場合の理由も確認できます。
+
 ### 設定のバックアップ（エクスポート / インポート）
 
 設定とプリセットを JSON ファイルで書き出し・読み込みできます。チームで命名ルールを
@@ -77,17 +84,17 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 - 分割 ZIP 対応のオン・オフ
 - 案件別プリセットの管理
 - 設定のエクスポート / インポート
-- 直近の命名結果・失敗理由の確認と履歴削除
+- 直近の命名結果・失敗理由の確認、履歴の再利用・削除
 - Chrome の表示言語に連動する日本語・英語 UI
 
-## Chrome Web Store への公開
+## インストール
 
-公開・更新の手順は [docs/PUBLISHING.md](docs/PUBLISHING.md)、GitHub Actions による
-自動公開の初期設定は [docs/CD_SETUP.md](docs/CD_SETUP.md) を参照してください。
-掲載テキストは [docs/store-listing.md](docs/store-listing.md)、ストア用スクリーンショットと
-プロモタイルは [`assets/store/`](assets/store/) にあります。
+### Chrome Web Store（推奨）
 
-## インストール（開発版）
+[Chrome Web Store の Drive Zip Namer](https://chromewebstore.google.com/detail/drive-zip-namer/ochphpogjlockibdajlipdhojmnghaem)
+を開き、「Chrome に追加」を選択してください。
+
+### 開発版
 
 1. このリポジトリをクローンまたは [Releases](../../releases) から ZIP をダウンロードして展開する
 2. Chrome で `chrome://extensions` を開く
@@ -129,15 +136,21 @@ npm run icons
 # 配布用 ZIP の作成（dist/drive-zip-namer-<version>.zip）
 npm run package
 
-# v1リリース前の全検査
+# リリース前の全検査
 npm run release:check
 ```
 
-v1 の手動確認項目は [docs/V1_RELEASE_CHECKLIST.md](docs/V1_RELEASE_CHECKLIST.md)、
+Node.js 26 以降が必要です。手動確認項目は [docs/V1_RELEASE_CHECKLIST.md](docs/V1_RELEASE_CHECKLIST.md)、
 変更内容は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 push / Pull Request のたびに [GitHub Actions](.github/workflows/ci.yml) が
-上記のテスト・検証・パッケージ生成を Node 20 / 22 / 26（最新）で自動実行します。
+上記のテスト・検証・パッケージ生成を Node.js 26 で自動実行します。
+
+### 公開・リリース
+
+Chrome Web Store への公開・更新手順は [docs/PUBLISHING.md](docs/PUBLISHING.md)、GitHub Actions
+による自動公開の設定は [docs/CD_SETUP.md](docs/CD_SETUP.md) を参照してください。掲載テキストは
+[docs/store-listing.md](docs/store-listing.md)、ストア用画像は [`assets/store/`](assets/store/) にあります。
 
 ### ディレクトリ構成
 
