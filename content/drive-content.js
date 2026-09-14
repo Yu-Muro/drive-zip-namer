@@ -57,7 +57,7 @@
         .replace(/\s+/g, " ")
         .trim();
 
-      if (!/(^|\s)(ダウンロード|Download)(\s|$)/i.test(label)) return;
+      if (!/(ダウンロード|download)/i.test(label)) return;
       chrome.runtime
         .sendMessage({
           type: "DZN_REGISTER_DOWNLOAD_INTENT",
@@ -77,13 +77,42 @@
   }
 
   function readFolderName() {
-    // 例: "請求書 - Google ドライブ" / "Folder - Google Drive"
+    const breadcrumbName = readBreadcrumbFolderName();
+    if (breadcrumbName) return breadcrumbName;
+
+    // 例: "請求書 - Google ドライブ" / "Folder – Google Drive"
     const title = document.title || "";
     const cleaned = title
-      .replace(/\s*[-–]\s*Google\s*(ドライブ|Drive)\s*$/i, "")
+      .replace(/^\s*\(\d+\)\s*/, "")
+      .replace(/\s*[-–—|]\s*Google\s*(ドライブ|Drive)\s*$/i, "")
       .trim();
     if (!cleaned || /^Google\s*(ドライブ|Drive)$/i.test(cleaned)) return null;
     return cleaned;
+  }
+
+  function readBreadcrumbFolderName() {
+    const containers = document.querySelectorAll(
+      '[aria-label*="Breadcrumb" i], [aria-label*="パンくず"], ' +
+        '[aria-label*="Current folder" i], [aria-label*="現在のフォルダ"]'
+    );
+
+    for (const container of [...containers].reverse()) {
+      const items = container.querySelectorAll(
+        '[aria-current="page"], button, a, [role="button"]'
+      );
+      for (const item of [...items].reverse()) {
+        const label = [
+          item.getAttribute("aria-label"),
+          item.getAttribute("title"),
+          item.textContent
+        ]
+          .find((value) => value && value.trim())
+          ?.replace(/\s+/g, " ")
+          .trim();
+        if (label) return label;
+      }
+    }
+    return null;
   }
 
   function readSelectedCount() {
