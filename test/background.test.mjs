@@ -8,6 +8,8 @@ async function loadBackground({
   initialStorage = {},
   initialSessionStorage = {},
   promptResponse = { name: "sample" },
+  contextResponse = (tabId) => ({ folder: `folder-${tabId}`, count: tabId }),
+  lastFocusedTabId = null,
   tabs = [{ id: 1, windowId: 1, active: true, url: "https://drive.google.com/drive/my-drive" }]
 } = {}) {
   const storage = initialStorage;
@@ -61,12 +63,19 @@ async function loadBackground({
       session: storageArea(sessionStorage)
     },
     tabs: {
-      async query() {
+      async query(query = {}) {
+        if (query.lastFocusedWindow) {
+          return tabs.filter(
+            (tab) => tab.id === lastFocusedTabId && (!query.active || tab.active)
+          );
+        }
         return tabs;
       },
       async sendMessage(tabId, message) {
         if (message?.type === "DZN_GET_DRIVE_CONTEXT") {
-          return { folder: `folder-${tabId}`, count: tabId };
+          return typeof contextResponse === "function"
+            ? contextResponse(tabId, message)
+            : contextResponse;
         }
         promptCount += 1;
         return typeof promptResponse === "function"
@@ -284,6 +293,59 @@ test("未解決のテンプレート変数をファイル名へ残さない", as
   assert.equal(await app.runDownload(), undefined);
 });
 
+test("ダウンロード時入力のプレースホルダーをDrive文脈で展開する", async () => {
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: []
+    },
+    promptResponse: { name: "{folder}_{count}", folder: "Invoices", count: 3 }
+  });
+
+  assert.equal((await app.runDownload()).filename, "Invoices_3.zip");
+});
+
+test("予約テンプレートを展開できない場合は名前入力へ切り替える", async () => {
+  const now = Date.now();
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "{folder}_report",
+        createdAt: now,
+        expiresAt: now + 60_000
+      }
+    },
+    contextResponse: {},
+    promptResponse: { name: "manual-report" }
+  });
+
+  assert.equal((await app.runDownload()).filename, "manual-report.zip");
+  assert.equal(app.storage.pendingRename, undefined);
+  assert.equal(app.getPromptCount(), 1);
+});
+
+test("複数ウィンドウでは最後に操作したDriveタブへ名前入力を表示する", async () => {
+  const tabs = [
+    { id: 1, windowId: 1, active: true, url: "https://drive.google.com/drive/folders/a" },
+    { id: 2, windowId: 2, active: true, url: "https://drive.google.com/drive/folders/b" }
+  ];
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: []
+    },
+    tabs,
+    lastFocusedTabId: 2,
+    promptResponse: (tabId) => ({ name: `tab-${tabId}` })
+  });
+
+  assert.equal((await app.runDownload()).filename, "tab-2.zip");
+  assert.equal(app.getPromptCount(), 1);
+});
+
 test("複数セッションがあり対象タブを特定できなければ命名しない", async () => {
   const now = Date.now();
   const app = await loadBackground({
@@ -363,6 +425,27 @@ test("予約テンプレートへDrive文脈と保存設定を反映する", asy
     conflictAction: "overwrite"
   });
   assert.equal(app.storage.pendingRename, undefined);
+  assert.equal(app.getPromptCount(), 0);
+});
+
+test("操作時と現在のDrive文脈を補完してプレースホルダーを展開する", async () => {
+  const now = Date.now();
+  const app = await loadBackground({
+    initialStorage: {
+      userSettings: promptSettings({ allowMultiple: false }),
+      presets: [],
+      pendingRename: {
+        enabled: true,
+        template: "{folder}_{count}",
+        createdAt: now,
+        expiresAt: now + 60_000
+      }
+    },
+    contextResponse: { folder: "Invoices", count: 3 }
+  });
+  await app.registerIntent(1, { count: 3 });
+
+  assert.equal((await app.runDownload()).filename, "Invoices_3.zip");
   assert.equal(app.getPromptCount(), 0);
 });
 
