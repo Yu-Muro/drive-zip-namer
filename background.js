@@ -92,6 +92,7 @@ async function handleFilename(downloadItem, suggest) {
     const target = driveZip
       ? await resolveDriveTarget(downloadItem, stored.pendingRename?.sessionTabId)
       : null;
+    let fallbackTemplate = null;
 
     // --- 1. ポップアップで事前予約されたテンプレートを最優先 ---
     const pendingRename = driveZip
@@ -117,23 +118,18 @@ async function handleFilename(downloadItem, suggest) {
       );
       if (!base) {
         await chrome.storage.local.remove("pendingRename");
-        void recordOperation(
-          "error",
-          "テンプレートに未解決または未対応の変数があります。"
-        );
-        respond();
+        fallbackTemplate = template;
+      } else {
+        respond({
+          filename: withSaveFolder(
+            buildSequencedFilename(base, pendingRename.claimedSequence),
+            settings.saveFolder
+          ),
+          conflictAction: settings.conflictAction
+        });
+
         return;
       }
-
-      respond({
-        filename: withSaveFolder(
-          buildSequencedFilename(base, pendingRename.claimedSequence),
-          settings.saveFolder
-        ),
-        conflictAction: settings.conflictAction
-      });
-
-      return;
     }
 
     // --- Drive由来のZIP以外はChromeに任せる ---
@@ -144,6 +140,12 @@ async function handleFilename(downloadItem, suggest) {
 
     // --- 2. ダウンロード時モーダルで名前を尋ねる ---
     if (!settings.promptOnDownload) {
+      if (fallbackTemplate != null) {
+        void recordOperation(
+          "error",
+          "テンプレートを自動展開できず、名前入力も無効なため元の名前を使用しました。"
+        );
+      }
       respond();
       return;
     }
@@ -151,7 +153,11 @@ async function handleFilename(downloadItem, suggest) {
     const groupKey = target?.tab?.id == null ? null : `tab:${target.tab.id}`;
 
     // 同じタブで名前入力中の後続ZIPは、その入力結果を共有する。
-    const activeGroup = settings.allowMultiple && groupKey && target.source !== "intent"
+    const startsNewDownload =
+      fallbackTemplate != null ||
+      target?.source === "intent" ||
+      target?.source === "last-focused-ambiguous";
+    const activeGroup = settings.allowMultiple && groupKey && !startsNewDownload
       ? inFlightPromptGroups.get(groupKey)
       : null;
     if (activeGroup && now <= activeGroup.expiresAt) {
@@ -182,7 +188,7 @@ async function handleFilename(downloadItem, suggest) {
     }
 
     // service worker の再起動前に確定済みだった分割ZIPセッションを復元する。
-    if (settings.allowMultiple && target?.source !== "intent") {
+    if (settings.allowMultiple && !startsNewDownload) {
       const resumed = await claimDownloadSession(target?.tab?.id, now);
       if (resumed) {
         respond({
@@ -211,7 +217,13 @@ async function handleFilename(downloadItem, suggest) {
       id: crypto.randomUUID(),
       seq: 0,
       expiresAt: now + PROMPT_TIMEOUT_MS + MULTI_ZIP_WINDOW_MS,
-      basePromise: askForName(settings, presets, lastProject, target.tab)
+      basePromise: askForName(
+        settings,
+        presets,
+        lastProject,
+        target.tab,
+        fallbackTemplate ?? settings.defaultTemplate
+      )
     };
     if (settings.allowMultiple && groupKey) {
       inFlightPromptGroups.set(groupKey, currentGroup);
@@ -255,7 +267,7 @@ async function handleFilename(downloadItem, suggest) {
  * Driveタブの content script にモーダル表示を依頼し、確定した名前を返す。
  * キャンセル・タイムアウト・タブ無し・失敗時は null（＝Chromeのデフォルト命名）。
  */
-async function askForName(settings, presets, project, tab) {
+async function askForName(settings, presets, project, tab, defaultTemplate) {
   try {
     if (!tab?.id) return null;
 
@@ -265,7 +277,7 @@ async function askForName(settings, presets, project, tab) {
     const resp = await withTimeout(
       chrome.tabs.sendMessage(tab.id, {
         type: "DZN_PROMPT_ZIP_NAME",
-        defaultTemplate: settings.defaultTemplate,
+        defaultTemplate: defaultTemplate ?? settings.defaultTemplate,
         values,
         presets,
         timeoutMs: PROMPT_TIMEOUT_MS
@@ -318,21 +330,23 @@ async function rememberName(name) {
 
 /** Driveタブに現在のフォルダ名・選択数を問い合わせる（取得できなければ空） */
 async function getDriveContext(downloadItem, knownTarget) {
+  const knownContext = normalizeContext(knownTarget?.context);
   try {
     const target = knownTarget ?? (await resolveDriveTarget(downloadItem));
-    if (target?.context?.folder || target?.context?.count) {
-      return target.context;
-    }
     const tab = target?.tab;
-    if (!tab?.id) return {};
+    if (!tab?.id) return knownContext;
     const resp = await withTimeout(
       chrome.tabs.sendMessage(tab.id, { type: "DZN_GET_DRIVE_CONTEXT" }),
       3000
     );
-    if (resp?.timedOut) return {};
-    return { folder: resp?.folder, count: resp?.count };
+    if (resp?.timedOut) return knownContext;
+    const currentContext = normalizeContext(resp);
+    return {
+      folder: knownContext.folder ?? currentContext.folder,
+      count: knownContext.count ?? currentContext.count
+    };
   } catch {
-    return {};
+    return knownContext;
   }
 }
 
@@ -476,12 +490,32 @@ async function resolveDriveTarget(downloadItem, preferredTabId) {
     const sessionTab = tabs.find((tab) => tab.id === activeSessions[0].tabId);
     if (sessionTab) return { tab: sessionTab, source: "session" };
   }
-  if (activeSessions.length > 1) return null;
+  if (activeSessions.length > 1) {
+    const lastFocused = await findLastFocusedDriveTab();
+    return lastFocused
+      ? { tab: lastFocused, source: "last-focused-ambiguous" }
+      : null;
+  }
 
   const activeTabs = tabs.filter((tab) => tab.active);
   if (activeTabs.length === 1) return { tab: activeTabs[0], source: "active" };
   if (tabs.length === 1) return { tab: tabs[0], source: "only-tab" };
+  const lastFocused = await findLastFocusedDriveTab();
+  if (lastFocused) return { tab: lastFocused, source: "last-focused" };
   return null;
+}
+
+async function findLastFocusedDriveTab() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: "https://drive.google.com/*",
+      active: true,
+      lastFocusedWindow: true
+    });
+    return tabs.length === 1 ? tabs[0] : null;
+  } catch {
+    return null;
+  }
 }
 
 async function consumeDownloadIntent(tabs) {
