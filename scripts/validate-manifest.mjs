@@ -34,6 +34,9 @@ if (manifest) {
   if (!manifest.background?.service_worker) {
     errors.push("background.service_worker が未設定です");
   }
+  if (!manifest.default_locale) {
+    errors.push("default_locale が未設定です");
+  }
 
   // manifest が参照するファイルが実在するか
   const referenced = [
@@ -51,6 +54,8 @@ if (manifest) {
       errors.push(`manifest が参照する ${rel} が存在しません`);
     }
   }
+
+  validateLocales(manifest.default_locale);
 }
 
 if (manifest && pkg && manifest.version !== pkg.version) {
@@ -66,3 +71,32 @@ if (errors.length > 0) {
 }
 
 console.log(`manifest OK (v${manifest.version}, MV${manifest.manifest_version})`);
+
+function validateLocales(defaultLocale) {
+  const locales = [defaultLocale, "en"].filter(Boolean);
+  const dictionaries = locales.map((locale) => [
+    locale,
+    readJson(`_locales/${locale}/messages.json`)
+  ]);
+  const base = dictionaries[0]?.[1];
+  if (!base) return;
+
+  for (const [locale, messages] of dictionaries) {
+    if (!messages) continue;
+    const missing = Object.keys(base).filter((key) => !messages[key]?.message);
+    const extra = Object.keys(messages).filter((key) => !base[key]);
+    if (missing.length > 0) {
+      errors.push(`${locale} の翻訳が不足しています: ${missing.join(", ")}`);
+    }
+    if (extra.length > 0) {
+      errors.push(`${locale} に未定義の翻訳があります: ${extra.join(", ")}`);
+    }
+  }
+
+  for (const field of [manifest.name, manifest.description, manifest.action?.default_title]) {
+    const key = /^__MSG_(.+)__$/.exec(field ?? "")?.[1];
+    if (key && !base[key]?.message) {
+      errors.push(`manifest が参照する翻訳 ${key} が存在しません`);
+    }
+  }
+}
