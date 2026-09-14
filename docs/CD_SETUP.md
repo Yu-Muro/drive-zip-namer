@@ -71,12 +71,20 @@ gcloud iam workload-identity-pools providers describe drive-zip-namer \
 
 ## 3. 公開先
 
-公開情報である次の値はワークフロー内に設定済み。
+GitHub リポジトリの **Settings → Secrets and variables → Actions → Variables** で、
+次の Repository Variables を設定する。
 
-- Google Cloudプロジェクト: `drive-zip-namer`（プロジェクト番号 `606434867453`）
-- Publisher ID: `850a9816-864d-402d-9097-5eba03a8a9f1`
-- 拡張機能ID: `ochphpogjlockibdajlipdhojmnghaem`
-- サービスアカウント: `chrome-web-store-publisher@drive-zip-namer.iam.gserviceaccount.com`
+| 変数名 | 設定する値 |
+| --- | --- |
+| `GCP_PROJECT_ID` | Google Cloud のプロジェクト ID |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Provider の完全名 |
+| `GCP_SERVICE_ACCOUNT` | Chrome Web Store に登録したサービスアカウントのメールアドレス |
+| `CHROME_WEB_STORE_PUBLISHER_ID` | Developer Dashboard に表示される Publisher ID |
+| `CHROME_WEB_STORE_EXTENSION_ID` | 公開対象の拡張機能 ID |
+
+これらは認証情報ではないため Repository Secrets ではなく Variables として管理する。
+アクセストークンは Workload Identity Federation により実行時に短期発行されるため、
+リポジトリには保存しない。
 
 ## 4. 公開承認の設定
 
