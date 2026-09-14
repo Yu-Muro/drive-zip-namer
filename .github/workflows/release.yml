@@ -1,0 +1,121 @@
+name: Release to Chrome Web Store
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+concurrency:
+  group: chrome-web-store-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PACKAGE_ARTIFACT: drive-zip-namer-extension
+  GCP_PROJECT_ID: drive-zip-namer
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/606434867453/locations/global/workloadIdentityPools/github/providers/drive-zip-namer
+  GCP_SERVICE_ACCOUNT: chrome-web-store-publisher@drive-zip-namer.iam.gserviceaccount.com
+  CHROME_WEB_STORE_PUBLISHER_ID: 850a9816-864d-402d-9097-5eba03a8a9f1
+  CHROME_WEB_STORE_EXTENSION_ID: ochphpogjlockibdajlipdhojmnghaem
+
+jobs:
+  build:
+    name: Validate and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify the tagged commit is on main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/verify-release-tag.mjs "$RELEASE_TAG"
+
+      - name: Run release checks and build package
+        run: npm run release:check
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_ARTIFACT }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  upload:
+    name: Upload package to Chrome Web Store
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_ARTIFACT }}
+          path: dist
+
+      - name: Authenticate to Google Cloud
+        id: google-auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Upload package
+        env:
+          CHROME_WEB_STORE_ACCESS_TOKEN: ${{ steps.google-auth.outputs.access_token }}
+          CHROME_WEB_STORE_PUBLISHER_ID: ${{ env.CHROME_WEB_STORE_PUBLISHER_ID }}
+          CHROME_WEB_STORE_EXTENSION_ID: ${{ env.CHROME_WEB_STORE_EXTENSION_ID }}
+        run: node scripts/chrome-web-store.mjs upload "dist/drive-zip-namer-${GITHUB_REF_NAME#v}.zip"
+
+  submit:
+    name: Submit for review and automatic publishing
+    needs: upload
+    runs-on: ubuntu-latest
+    environment: chrome-web-store-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: google-auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Submit for review
+        env:
+          CHROME_WEB_STORE_ACCESS_TOKEN: ${{ steps.google-auth.outputs.access_token }}
+          CHROME_WEB_STORE_PUBLISHER_ID: ${{ env.CHROME_WEB_STORE_PUBLISHER_ID }}
+          CHROME_WEB_STORE_EXTENSION_ID: ${{ env.CHROME_WEB_STORE_EXTENSION_ID }}
+        run: node scripts/chrome-web-store.mjs publish

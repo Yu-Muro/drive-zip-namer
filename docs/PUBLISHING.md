@@ -3,7 +3,10 @@
 Drive Zip Namer を Chrome Web Store に公開・更新するための手順書。
 掲載テキストは [store-listing.md](store-listing.md)、ストア画像は [`../assets/store/`](../assets/store/) を使う。
 
-> デベロッパー登録・$5 の支払い・審査への提出は、ダッシュボードでの手動操作が必要です。
+公開後のバージョン更新は GitHub Actions で自動化している。初期設定と通常の更新手順は
+[CD_SETUP.md](CD_SETUP.md) を参照する。この文書の手動手順は初回公開と障害時の代替手段として残す。
+
+> 初回のデベロッパー登録・$5 の支払い・掲載情報の設定は、ダッシュボードでの手動操作が必要です。
 
 ---
 
@@ -82,9 +85,13 @@ Drive Zip Namer を Chrome Web Store に公開・更新するための手順書�
 
 1. コード修正 → `manifest.json` と `package.json` の `version` を上げる
    （CI の `validate` が不一致を検知する）
-2. `npm run package` で新しい ZIP を作成
-3. ダッシュボードで新バージョンをアップロード → 審査 → 公開
-4. GitHub 側も `git tag vX.Y.Z` と Release を作成（配布 ZIP を添付）
+2. `main` にマージして CI の成功を確認する
+3. `vX.Y.Z` タグを push する
+4. GitHub Actions が ZIP を検査・アップロードした後、公開環境を承認する
+5. Chrome Web Store の審査通過後に自動公開される
+
+CD を使用できない場合は、`npm run package` で新しい ZIP を作成し、Developer Dashboard
+からアップロード・審査提出する。
 
 ---
 
