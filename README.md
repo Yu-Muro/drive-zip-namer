@@ -80,7 +80,8 @@ Google Drive で複数ファイルを選択してダウンロードしたとき�
 
 ## Chrome Web Store への公開
 
-公開・更新の手順は [docs/PUBLISHING.md](docs/PUBLISHING.md) を参照してください。
+公開・更新の手順は [docs/PUBLISHING.md](docs/PUBLISHING.md)、GitHub Actions による
+自動公開の初期設定は [docs/CD_SETUP.md](docs/CD_SETUP.md) を参照してください。
 掲載テキストは [docs/store-listing.md](docs/store-listing.md)、ストア用スクリーンショットと
 プロモタイルは [`assets/store/`](assets/store/) にあります。
 
@@ -140,7 +141,7 @@ push / Pull Request のたびに [GitHub Actions](.github/workflows/ci.yml) が
 
 ```
 drive-zip-namer/
-├── .github/workflows/     # GitHub Actions CI
+├── .github/workflows/     # GitHub Actions CI/CD
 ├── manifest.json          # Manifest V3
 ├── background.js          # service worker（ダウンロード名の差し替え）
 ├── content/               # Drive ページに出す名前入力モーダル

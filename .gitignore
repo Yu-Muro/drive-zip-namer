@@ -1,3 +1,6 @@
 .DS_Store
 node_modules/
 dist/
+
+# google-github-actions/auth が生成する一時認証情報
+gha-creds-*.json
