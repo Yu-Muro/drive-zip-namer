@@ -18,10 +18,10 @@ jobs:
       matrix:
         node: ["20", "22", "26"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
@@ -32,10 +32,10 @@ jobs:
     name: Validate manifest & build package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "26"
 
@@ -58,7 +58,7 @@ jobs:
         run: npm run verify-package
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: drive-zip-namer-extension
           path: dist/*.zip
