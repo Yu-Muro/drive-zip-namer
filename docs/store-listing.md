@@ -43,6 +43,8 @@ Drive Zip Namer を使えば、ダウンロード前にファイル名を指定�
 
 - downloads: Google Driveからダウンロードされる ZIP ファイルの保存名を変更するために
   使用します。ダウンロード内容の読み取りや外部送信は行いません。
+- scripting: 拡張機能の導入・更新前から開いていた Google Drive タブにも、
+  ファイル名入力ダイアログを読み込むために使用します。
 - storage: ユーザーが入力したファイル名と設定をブラウザ内に保存するために使用します。
 - host permission (drive.google.com): 動作対象を Google Drive に限定し、ダウンロード時の
   ファイル名入力ダイアログを Drive ページ上に表示するために使用します。

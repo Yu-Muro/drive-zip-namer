@@ -9,6 +9,7 @@ async function loadBackground({
   initialSessionStorage = {},
   promptResponse = { name: "sample" },
   contextResponse = (tabId) => ({ folder: `folder-${tabId}`, count: tabId }),
+  promptSendFailures = 0,
   lastFocusedTabId = null,
   tabs = [{ id: 1, windowId: 1, active: true, url: "https://drive.google.com/drive/my-drive" }]
 } = {}) {
@@ -18,6 +19,8 @@ async function loadBackground({
   let installedListener;
   let messageListener;
   let promptCount = 0;
+  let promptFailuresRemaining = promptSendFailures;
+  let injectionCount = 0;
 
   function storageArea(target) {
     return {
@@ -78,9 +81,18 @@ async function loadBackground({
             : contextResponse;
         }
         promptCount += 1;
+        if (promptFailuresRemaining > 0) {
+          promptFailuresRemaining -= 1;
+          throw new Error("Could not establish connection. Receiving end does not exist.");
+        }
         return typeof promptResponse === "function"
           ? promptResponse(tabId, message)
           : promptResponse;
+      }
+    },
+    scripting: {
+      async executeScript() {
+        injectionCount += 1;
       }
     }
   };
@@ -102,6 +114,9 @@ async function loadBackground({
     },
     getPromptCount() {
       return promptCount;
+    },
+    getInjectionCount() {
+      return injectionCount;
     },
     registerIntent(tabId, context = {}) {
       const tab = tabs.find((item) => item.id === tabId);
@@ -174,6 +189,20 @@ test("明示的に空にしたプリセットは初回処理で上書きしな�
   await app.runInstalled();
 
   assert.deepEqual(app.storage.presets, []);
+});
+
+test("既に開いていたDriveタブにも名前入力処理を注入して再試行する", async () => {
+  const app = await loadBackground({
+    initialStorage: {},
+    promptSendFailures: 1,
+    promptResponse: { name: "recovered" }
+  });
+
+  const result = await app.runDownload();
+
+  assert.equal(result.filename, "recovered.zip");
+  assert.equal(app.getPromptCount(), 2);
+  assert.equal(app.getInjectionCount(), 1);
 });
 
 test("ダウンロード時ダイアログで確定したテンプレートを履歴へ保存する", async () => {

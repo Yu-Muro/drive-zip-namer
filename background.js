@@ -276,7 +276,7 @@ async function askForName(settings, presets, project, tab, defaultTemplate) {
     const values = { ...dateValues(now), project };
 
     const resp = await withTimeout(
-      chrome.tabs.sendMessage(tab.id, {
+      sendToDriveTab(tab.id, {
         type: "DZN_PROMPT_ZIP_NAME",
         defaultTemplate: defaultTemplate ?? settings.defaultTemplate,
         values,
@@ -337,7 +337,7 @@ async function getDriveContext(downloadItem, knownTarget) {
     const tab = target?.tab;
     if (!tab?.id) return knownContext;
     const resp = await withTimeout(
-      chrome.tabs.sendMessage(tab.id, { type: "DZN_GET_DRIVE_CONTEXT" }),
+      sendToDriveTab(tab.id, { type: "DZN_GET_DRIVE_CONTEXT" }),
       3000
     );
     if (resp?.timedOut) return knownContext;
@@ -348,6 +348,27 @@ async function getDriveContext(downloadItem, knownTarget) {
     };
   } catch {
     return knownContext;
+  }
+}
+
+/**
+ * Drive タブへメッセージを送り、受信側がまだ読み込まれていない場合は
+ * content script を注入して一度だけ再試行する。
+ *
+ * 拡張機能のインストール・更新前から開かれていたタブには manifest の
+ * content script が自動注入されないため、このフォールバックが必要になる。
+ */
+async function sendToDriveTab(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (firstError) {
+    if (!chrome.scripting?.executeScript) throw firstError;
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content/drive-content.js"]
+    });
+    return chrome.tabs.sendMessage(tabId, message);
   }
 }
 
