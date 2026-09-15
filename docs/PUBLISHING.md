@@ -58,6 +58,8 @@ Drive Zip Namer を Chrome Web Store に公開・更新するための手順書�
 **権限の正当性（Permission justification）**
 
 - `downloads` — Google Drive 由来の ZIP ダウンロードの保存名を変更するため
+- `scripting` — 導入・更新前から開いていた Google Drive タブにも名前入力画面を
+  読み込むため
 - `storage` — 入力したファイル名・設定・プリセットをローカルに保存するため
 - host permission (`drive.google.com`) — 対象を Google Drive に限定し、
   ダウンロード時の名前入力ダイアログを Drive ページ上に表示するため

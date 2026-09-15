@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Drive Zip Namer** (last updated: 2026-09-13)
+**Drive Zip Namer** (last updated: 2026-09-15)
 
 ## 日本語
 
@@ -16,6 +16,8 @@ Drive Zip Namer は、ユーザーのプライバシーを尊重します。
   一切含まれていません。
 - `downloads` 権限は Google Drive 由来の ZIP ダウンロードの保存名を変更するためだけに
   使用します。
+- `scripting` 権限は、拡張機能の導入・更新前から開いていた Google Drive タブに
+  ファイル名入力画面を読み込むためだけに使用します。
 - `https://drive.google.com/*` のホスト権限は、動作対象を Google Drive に限定するために
   使用します。
 
@@ -34,6 +36,8 @@ Drive Zip Namer respects your privacy.
 - It sends **no data to any external server**. There are no analytics or tracking.
 - The `downloads` permission is used solely to rename ZIP downloads that originate
   from Google Drive.
+- The `scripting` permission is used solely to load the filename dialog into Google
+  Drive tabs that were already open when the extension was installed or updated.
 - The `https://drive.google.com/*` host permission limits the extension's scope to
   Google Drive.
 
